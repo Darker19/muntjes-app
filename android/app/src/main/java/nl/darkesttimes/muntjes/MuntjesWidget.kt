@@ -8,6 +8,10 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.view.View
 import android.widget.RemoteViews
 import kotlin.concurrent.thread
 
@@ -36,6 +40,47 @@ class MuntjesWidget : AppWidgetProvider() {
         private fun kleur(tekst: String?, standaard: Int) =
             runCatching { Color.parseColor(tekst) }.getOrDefault(standaard)
 
+        // Sterren naast het saldo en de gekozen taken van deze week, bijv. "Zelf aankleden ★★★☆☆".
+        private fun toonTaken(v: RemoteViews, d: org.json.JSONObject) {
+            val heeftTaken = d.optBoolean("heeftTaken")
+            val zichtbaar = if (heeftTaken) View.VISIBLE else View.GONE
+            v.setViewVisibility(R.id.ster_icoon, zichtbaar)
+            v.setViewVisibility(R.id.sterren, zichtbaar)
+            v.setViewVisibility(R.id.taken, zichtbaar)
+            v.setTextViewText(R.id.sterren, d.optInt("sterren").toString())
+
+            val regels = listOf(R.id.taak1, R.id.taak2, R.id.taak3)
+            val taken = d.optJSONArray("taken")
+            val aantal = taken?.length() ?: 0
+            regels.forEachIndexed { i, id ->
+                when {
+                    i < aantal -> {
+                        val t = taken!!.getJSONObject(i)
+                        v.setTextViewText(id, taakTekst(t.optString("naam"), t.optInt("sterren"), t.optInt("doel"), t.optBoolean("klaar")))
+                        v.setViewVisibility(id, View.VISIBLE)
+                    }
+                    i == 0 && heeftTaken -> {
+                        v.setTextViewText(id, "Nog geen taken gekozen voor deze week")
+                        v.setViewVisibility(id, View.VISIBLE)
+                    }
+                    else -> v.setViewVisibility(id, View.GONE)
+                }
+            }
+        }
+
+        private fun taakTekst(naam: String, n: Int, doel: Int, klaar: Boolean): CharSequence {
+            val t = SpannableStringBuilder(naam).append("  ")
+            fun kleur(tekst: String, k: Int) {
+                val begin = t.length
+                t.append(tekst)
+                t.setSpan(ForegroundColorSpan(k), begin, t.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            kleur("★".repeat(n), Color.parseColor("#F59E0B"))
+            kleur("☆".repeat((doel - n).coerceAtLeast(0)), Color.parseColor("#AEB6C1"))
+            if (klaar) kleur("  ✓ voltooid", Color.parseColor("#22784A"))
+            return t
+        }
+
         private fun maakViews(c: Context): RemoteViews {
             val v = RemoteViews(c.packageName, R.layout.widget)
             val sleutel = Opslag.sleutel(c)
@@ -55,6 +100,9 @@ class MuntjesWidget : AppWidgetProvider() {
                 v.setImageViewResource(R.id.mascotte, R.drawable.munt)
                 v.setImageViewResource(R.id.eenheid, R.drawable.munt)
                 v.setInt(R.id.achtergrond, "setColorFilter", Color.WHITE)
+                v.setViewVisibility(R.id.ster_icoon, View.GONE)
+                v.setViewVisibility(R.id.sterren, View.GONE)
+                v.setViewVisibility(R.id.taken, View.GONE)
                 return v
             }
 
@@ -79,6 +127,7 @@ class MuntjesWidget : AppWidgetProvider() {
                 open > 1 -> "$open aanvragen wachten op goedkeuring"
                 else -> "Deze week ${d.optInt("week")} van ${d.optInt("maxWeek", 7)} verdiend"
             })
+            toonTaken(v, d)
             return v
         }
     }

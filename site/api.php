@@ -367,10 +367,17 @@ function samenvatting(array $data, string $kid): ?array {
     if (!$kind) return null;
     $weekStart = strtotime('monday this week 00:00') * 1000;
     $saldo = 0; $gereserveerd = 0; $open = 0; $week = 0; $laatste = null;
+    $sterren = 0; $perTaak = []; $voltooid = [];
     foreach ($data['tx'] ?? [] as $t) {
         if (($t['kid'] ?? '') !== $kid) continue;
         $bedrag = (int)($t['amount'] ?? 0);
         $status = $t['status'] ?? '';
+        $dezeWeek = ($t['ts'] ?? 0) >= $weekStart;
+        if (($t['type'] ?? '') === 'ster' && $status === 'goed' && $dezeWeek) {
+            $sterren++;
+            $perTaak[$t['ref']] = ($perTaak[$t['ref']] ?? 0) + 1;
+        }
+        if (($t['type'] ?? '') === 'taakklaar' && $dezeWeek) $voltooid[$t['ref']] = true;
         if ($status === 'goed') {
             $saldo += $bedrag;
             if (($t['type'] ?? '') === 'klus' && ($t['ts'] ?? 0) >= $weekStart) $week += $bedrag;
@@ -382,10 +389,22 @@ function samenvatting(array $data, string $kid): ?array {
             $laatste = ['label' => (string)($t['label'] ?? ''), 'bedrag' => $bedrag, 'status' => $status, 'ts' => (int)($t['ts'] ?? 0)];
         }
     }
+    // Taken waar het kind deze week op focust, met hoeveel sterren al binnen zijn.
+    $taken = array_column($data['taken'] ?? [], null, 'id');
+    $f = $data['focus'][$kid] ?? null;
+    $focus = is_array($f) && (int)($f['week'] ?? 0) === $weekStart && is_array($f['ids'] ?? null) ? $f['ids'] : [];
+    $gekozen = [];
+    foreach ($focus as $id) {
+        if (!isset($taken[$id])) continue;
+        $n = $perTaak[$id] ?? 0;
+        $doel = (int)$taken[$id]['doel'];
+        $gekozen[] = ['naam' => $taken[$id]['naam'], 'sterren' => min($n, $doel), 'doel' => $doel, 'klaar' => isset($voltooid[$id]) || $n >= $doel];
+    }
     return [
         'naam' => $kind['naam'], 'thema' => $kind['thema'] ?? 'geen', 'kleur' => $kind['kleur'], 'zacht' => $kind['zacht'],
         'saldo' => $saldo - $gereserveerd, 'gereserveerd' => $gereserveerd, 'open' => $open,
         'week' => $week, 'maxWeek' => (int)($data['maxWeek'] ?? 7), 'laatste' => $laatste,
+        'heeftTaken' => count($taken) > 0, 'sterren' => $sterren, 'taken' => $gekozen,
     ];
 }
 
