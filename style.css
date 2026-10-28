@@ -217,6 +217,7 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 .ricon { width: 64px; height: 64px; border-radius: 18px; background: #fff; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .rnaam { font-family: Fredoka, sans-serif; font-size: 22px; font-weight: 600; line-height: 1.2; }
 .coins { display: flex; gap: 4px; }
+.duur { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px 4px 8px; font-size: 14px; font-weight: 800; color: var(--muted2); }
 .voet { margin-top: auto; font-size: 14px; font-weight: 800; color: var(--muted2); }
 .chip { border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 800; }
 .c-aangevraagd { background: #FFE2C2; color: var(--orange-tx); }

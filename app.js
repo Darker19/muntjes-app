@@ -94,8 +94,8 @@ function beginState() {
       { id: 'k8', naam: 'Huisdier voeren', icon: 'paw', waarde: 1 }
     ],
     beloningen: [
-      { id: 'b1', naam: '15 min tablet', icon: 'tablet', kosten: 2, duur: 15 },
-      { id: 'b2', naam: '15 min tv', icon: 'tv', kosten: 2, duur: 15 },
+      { id: 'b1', naam: 'Tablet', icon: 'tablet', kosten: 2, duur: 15 },
+      { id: 'b2', naam: 'Tv kijken', icon: 'tv', kosten: 2, duur: 15 },
       { id: 'b3', naam: 'Extra voorleesverhaal', icon: 'book', kosten: 1 },
       { id: 'b4', naam: 'Later naar bed', icon: 'moon', kosten: 3 },
       { id: 'b5', naam: 'Toetje kiezen', icon: 'ice', kosten: 1 }
@@ -105,7 +105,7 @@ function beginState() {
     tx: [
       t(14, 'daan', 'klus', 'k3', 'Kamer opruimen', 1, 'aangevraagd', 'kind', 0.2 * UUR),
       t(1, 'noor', 'klus', 'k1', 'Tafel dekken', 1, 'goed', 'ouder', 0.5 * UUR),
-      t(8, 'daan', 'beloning', 'b2', '15 min tv', -2, 'aangevraagd', 'kind', 1 * UUR),
+      t(8, 'daan', 'beloning', 'b2', 'Tv kijken', -2, 'aangevraagd', 'kind', 1 * UUR),
       t(7, 'daan', 'klus', 'k8', 'Huisdier voeren', 1, 'goed', 'ouder', 9 * UUR),
       t(2, 'noor', 'beloning', 'b5', 'Toetje kiezen', -1, 'goed', 'kind', 23 * UUR),
       t(9, 'daan', 'klus', 'k6', 'Speelgoed opruimen', 1, 'goed', 'ouder', 24 * UUR),
@@ -131,12 +131,22 @@ function beginState() {
   };
 }
 
+// Oudere demo-stand had de tijd in de naam ("15 min tablet"); die staat nu apart.
+function zonderTijdInNaam(st) {
+  const oud = { '15 min tablet': 'Tablet', '15 min tv': 'Tv kijken' };
+  return {
+    ...st,
+    beloningen: st.beloningen.map((b) => (oud[b.naam] ? { ...b, naam: oud[b.naam] } : b)),
+    tx: st.tx.map((t) => (t.type === 'beloning' && oud[t.label] ? { ...t, label: oud[t.label] } : t))
+  };
+}
+
 function laad() {
   try {
     const raw = localStorage.getItem(OPSLAG);
     if (raw) {
       const d = JSON.parse(raw);
-      if (d && d.v === 2) return { ...beginState(), ...d, toast: null, sheet: null, edit: null };
+      if (d && d.v === 2) return zonderTijdInNaam({ ...beginState(), ...d, toast: null, sheet: null, edit: null });
     }
   } catch (e) { /* geen opslag beschikbaar: begin opnieuw */ }
   return beginState();
@@ -450,7 +460,7 @@ function schermAanvragen() {
     const act = isKlus ? klusVan(t.ref) : belVan(t.ref);
     const kid = kidVan(t.kid);
     const n = Math.abs(t.amount);
-    const sub = kid.naam + (isKlus ? ' meldt een klusje' : ' vraagt een beloning') + ' · ' + tijdLabel(t.ts) + (!isKlus && act && act.duur ? ' · met timer' : '');
+    const sub = kid.naam + (isKlus ? ' meldt een klusje' : ' vraagt een beloning') + ' · ' + tijdLabel(t.ts) + (!isKlus && act && act.duur ? ' · timer ' + act.duur + ' min' : '');
     return `<div class="req">
       <div class="req-top">
         <span class="icobox wit">${icon(act ? act.icon : IC.star, 26)}</span>
@@ -715,6 +725,7 @@ function renderKind() {
         ${info.chip ? `<span class="chip c-${status}">${info.chip}</span>` : ''}
       </span>
       <span class="rnaam">${b.naam}</span>
+      ${b.duur ? `<span class="duur">${icon(IC.klok, 18, 2)}${b.duur} minuten</span>` : ''}
       <span class="coins" role="img" aria-label="${b.kosten} ${munt(b.kosten)}">${coin(28).repeat(b.kosten)}</span>
       <span class="voet">${tekort ? 'Nog ' + nodig + ' ' + munt(nodig) + ' nodig' : info.voet}</span>
     </button>`;
