@@ -1,0 +1,57 @@
+name: Widget-app (Android)
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ "android/**", ".github/workflows/android.yml" ]
+  workflow_dispatch:
+
+concurrency: android-app
+
+jobs:
+  bouwen:
+    permissions:
+      contents: write   # om de APK als release te publiceren
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      # Firebase-instellingen en de ondertekensleutel staan als geheim in GitHub, niet in de repo.
+      - name: Geheimen klaarzetten
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          [ -n "$GOOGLE_SERVICES_JSON" ] && [ -n "$KEYSTORE_B64" ] || { echo "Geheimen ontbreken"; exit 1; }
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          printf '%s' "$KEYSTORE_B64" | base64 -d > android/app/release.jks
+
+      - name: APK bouwen
+        working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: gradle --no-daemon assembleRelease
+
+      # Downloadadres blijft altijd hetzelfde:
+      # https://github.com/Darker19/muntjes-app/releases/latest/download/muntjes-widget.apk
+      - name: Publiceren als release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk muntjes-widget.apk
+          gh release create "widget-${{ github.run_number }}" muntjes-widget.apk \
+            --title "Muntjes widget 1.${{ github.run_number }}" \
+            --notes "Android-widget voor de Muntjes-app. Installeren: open dit bestand op de tablet." \
+            --latest

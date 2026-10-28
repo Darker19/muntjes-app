@@ -649,8 +649,8 @@ const acties = {
     await start();
   },
   async ontkoppel(d) {
-    const r = await api('ontkoppel', { id: Number(d.id) });
-    if (r.ok) { melding('Tablet ontkoppeld'); laadBeheer(); }
+    const r = await api('ontkoppel', { id: Number(d.id), soort: d.x || 'tablet' });
+    if (r.ok) { melding(d.x === 'widget' ? 'Widget ontkoppeld' : 'Tablet ontkoppeld'); laadBeheer(); }
   },
   gebruikerOpen(d) {
     const g = (s.gebruikers || []).find((x) => String(x.id) === d.id);
@@ -917,18 +917,19 @@ function schermBeheer() {
       </button>`).join('')}
       <button type="button" class="lrij toevoegen" data-a="gebruikerOpen" data-id="0">+ Gebruiker toevoegen</button>
     </div>
-    <h2 class="sec">Gekoppelde tablets</h2>
+    <h2 class="sec">Gekoppelde tablets en widgets</h2>
     <div class="lijst">
       ${(s.apparaten || []).length
         ? s.apparaten.map((a) => {
           const k = kidVan(a.kid);
           return `<div class="lrij">
             ${k ? avatar(k) : ''}
-            <span class="col"><span>${k ? k.naam : 'Verwijderd kind'}</span><small>Gekoppeld ${tijdLabel(a.aangemaakt * 1000)}${a.laatst ? ' · laatst gezien ' + tijdLabel(a.laatst * 1000) : ''}</small></span>
-            <button type="button" class="btn btn-outline klein" data-a="ontkoppel" data-id="${a.id}">Ontkoppelen</button>
+            <span class="col"><span>${a.soort === 'widget' ? 'Widget' : 'Tablet'} · ${k ? k.naam : 'verwijderd kind'}</span><small>Gekoppeld ${tijdLabel(a.aangemaakt * 1000)}${a.laatst ? ' · laatst gezien ' + tijdLabel(a.laatst * 1000) : ''}</small></span>
+            <button type="button" class="btn btn-outline klein" data-a="ontkoppel" data-id="${a.id}" data-x="${a.soort || 'tablet'}">Ontkoppelen</button>
           </div>`;
         }).join('')
         : '<div class="lrij"><span class="r">Nog geen tablets. Open muntjes.darkesttimes.nl op de tablet en kies "Tablet van een kind".</span></div>'}
+      <a class="lrij" href="https://github.com/Darker19/muntjes-app/releases/latest/download/muntjes-widget.apk" style="color:var(--accent);font-weight:800;text-decoration:none">${icon(IC.tablet, 22)}<span class="col"><span>Widget-app downloaden (Android)</span><small>Saldo op het beginscherm van de tablet. Koppelen met jouw pincode.</small></span></a>
     </div>
     <button type="button" class="btn btn-ink vol" data-a="vergrendel">${icon(IC.slot, 18, 2)} Vergrendelen</button>`}`;
 }

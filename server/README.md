@@ -9,6 +9,7 @@ Wat er op de server staat voor muntjes.darkesttimes.nl. Deze bestanden gaan **ni
 - `data/` (alleen op de server, eigenaar uid 82): `muntjes.sqlite` + `sessions/`
 - `Caddyfile-blok.txt` → toegevoegd aan `/srv/web/Caddyfile`
 - De site zelf (`site/`) wordt bij een push naar `main` door GitHub Actions naar `/srv/web/sites/muntjes` gekopieerd (gebruiker `deploy`, alleen die map via rrsync).
+- Widget-app (`android/`): GitHub Actions bouwt bij een push naar `main` de APK en publiceert die als release (`muntjes-widget.apk`). Geheimen in GitHub: `GOOGLE_SERVICES_JSON`, `KEYSTORE_B64`, `KEYSTORE_PASSWORD`. Kopie van de ondertekensleutel: NAS `homes/Ricardo/Sleutels/muntjes-widget/`.
 - Back-up: `/srv/muntjes` staat in `/usr/local/sbin/nas-backup-export` (nachtelijk naar de NAS).
 
 Pincode vergeten? Zet een nieuwe `START_PIN` in `/srv/muntjes/.env` en wis de oude pincode:

@@ -11,8 +11,11 @@
  *   - familie: klusjes melden, muntjes geven (met berichtje), aanvragen goedkeuren/afwijzen, timers.
  * Tablet: apparaat-sleutel (header X-Apparaat), eenmalig gekoppeld door een ouder.
  *         Een tablet mag alleen aanvragen/meldingen voor zijn eigen kind toevoegen of intrekken.
+ * Widget: de Android-widget heeft een eigen sleutel (header X-Widget) die alleen het saldo
+ *         van één kind mag lezen. Na een wijziging stuurt de server een pushbericht (Firebase).
  */
 declare(strict_types=1);
+date_default_timezone_set('Europe/Amsterdam');   // weken en dagen zoals in de app
 
 const DB_FILE      = __DIR__ . '/data/muntjes.sqlite';
 const MAX_FOUTEN   = 5;        // na zoveel foute pincodes...
@@ -73,6 +76,15 @@ try {
         laatst INTEGER NOT NULL DEFAULT 0
     )');
     $db->exec('CREATE TABLE IF NOT EXISTS fouten (ip TEXT PRIMARY KEY, aantal INTEGER NOT NULL, tot INTEGER NOT NULL)');
+    $db->exec('CREATE TABLE IF NOT EXISTS widgets (
+        id INTEGER PRIMARY KEY,
+        token_hash TEXT NOT NULL UNIQUE,
+        kid TEXT NOT NULL,
+        fcm TEXT,
+        aangemaakt INTEGER NOT NULL,
+        laatst INTEGER NOT NULL DEFAULT 0
+    )');
+    $db->exec('CREATE TABLE IF NOT EXISTS kaartjes (hash TEXT PRIMARY KEY, tot INTEGER NOT NULL)');
     $db->exec('CREATE TABLE IF NOT EXISTS gebruikers (
         id INTEGER PRIMARY KEY,
         naam TEXT NOT NULL,
@@ -325,6 +337,118 @@ function familie_fout(array $oud, array $nieuw, string $naam): ?string {
     return null;
 }
 
+/* ---- widget ---- */
+
+// Wat de widget van één kind laat zien. Rekent hetzelfde als de app (saldo min gereserveerd).
+function samenvatting(array $data, string $kid): ?array {
+    $kind = null;
+    foreach ($data['kids'] ?? [] as $k) if (($k['id'] ?? '') === $kid) $kind = $k;
+    if (!$kind) return null;
+    $weekStart = strtotime('monday this week 00:00') * 1000;
+    $saldo = 0; $gereserveerd = 0; $open = 0; $week = 0; $laatste = null;
+    foreach ($data['tx'] ?? [] as $t) {
+        if (($t['kid'] ?? '') !== $kid) continue;
+        $bedrag = (int)($t['amount'] ?? 0);
+        $status = $t['status'] ?? '';
+        if ($status === 'goed') {
+            $saldo += $bedrag;
+            if (($t['type'] ?? '') === 'klus' && ($t['ts'] ?? 0) >= $weekStart) $week += $bedrag;
+        } elseif ($status === 'aangevraagd') {
+            $open++;
+            if ($bedrag < 0) $gereserveerd -= $bedrag;
+        }
+        if ($status !== 'afgewezen' && (!$laatste || ($t['ts'] ?? 0) > $laatste['ts'])) {
+            $laatste = ['label' => (string)($t['label'] ?? ''), 'bedrag' => $bedrag, 'status' => $status, 'ts' => (int)($t['ts'] ?? 0)];
+        }
+    }
+    return [
+        'naam' => $kind['naam'], 'thema' => $kind['thema'] ?? 'geen', 'kleur' => $kind['kleur'], 'zacht' => $kind['zacht'],
+        'saldo' => $saldo - $gereserveerd, 'gereserveerd' => $gereserveerd, 'open' => $open,
+        'week' => $week, 'maxWeek' => (int)($data['maxWeek'] ?? 7), 'laatste' => $laatste,
+    ];
+}
+
+function widget_wie(): ?array {
+    global $db;
+    $token = $_SERVER['HTTP_X_WIDGET'] ?? '';
+    if (!preg_match('/^[a-f0-9]{64}$/', $token)) return null;
+    $st = $db->prepare('SELECT id, kid, laatst FROM widgets WHERE token_hash = ?');
+    $st->execute([hash('sha256', $token)]);
+    $w = $st->fetch();
+    if ($w && (int)$w['laatst'] < time() - 60) $db->prepare('UPDATE widgets SET laatst = ? WHERE id = ?')->execute([time(), $w['id']]);
+    return $w ?: null;
+}
+
+// Widgets waarvan het kind er na deze wijziging anders uitziet.
+function widgets_met_wijziging(array $oud, array $nieuw): array {
+    global $db;
+    $uit = [];
+    foreach ($db->query('SELECT id, kid, fcm FROM widgets WHERE fcm IS NOT NULL')->fetchAll() as $w) {
+        if (!gelijk(samenvatting($oud, $w['kid']), samenvatting($nieuw, $w['kid']))) $uit[] = $w;
+    }
+    return $uit;
+}
+
+function b64url(string $s): string { return rtrim(strtr(base64_encode($s), '+/', '-_'), '='); }
+
+function http_post(string $url, string $body, array $headers): array {
+    $c = curl_init($url);
+    curl_setopt_array($c, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
+    $antwoord = (string)curl_exec($c);
+    $code = (int)curl_getinfo($c, CURLINFO_RESPONSE_CODE);
+    curl_close($c);
+    return [$code, $antwoord];
+}
+
+function firebase(): ?array {
+    $pad = getenv('FIREBASE_SLEUTEL');
+    if (!$pad || !is_readable($pad)) return null;
+    $sa = json_decode((string)file_get_contents($pad), true);
+    return is_array($sa) && isset($sa['private_key'], $sa['client_email'], $sa['project_id']) ? $sa : null;
+}
+
+// Toegangssleutel voor Firebase (OAuth, 1 uur geldig, bewaard in de database).
+function google_token(array $sa): ?string {
+    $cache = json_decode((string)instelling('fcm_toegang'), true);
+    if (is_array($cache) && ($cache['tot'] ?? 0) > time() + 60) return $cache['token'];
+    $nu = time();
+    $deel = b64url(json_encode(['alg' => 'RS256', 'typ' => 'JWT'])) . '.' . b64url(json_encode([
+        'iss' => $sa['client_email'], 'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+        'aud' => 'https://oauth2.googleapis.com/token', 'iat' => $nu, 'exp' => $nu + 3600,
+    ]));
+    if (!openssl_sign($deel, $handtekening, $sa['private_key'], OPENSSL_ALGO_SHA256)) return null;
+    [$code, $antwoord] = http_post('https://oauth2.googleapis.com/token', http_build_query([
+        'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer', 'assertion' => $deel . '.' . b64url($handtekening),
+    ]), ['Content-Type: application/x-www-form-urlencoded']);
+    $j = json_decode($antwoord, true);
+    if ($code !== 200 || empty($j['access_token'])) { error_log('Muntjes: geen Firebase-token: ' . $antwoord); return null; }
+    zet_instelling('fcm_toegang', json_encode(['token' => $j['access_token'], 'tot' => $nu + (int)($j['expires_in'] ?? 3600)]));
+    return $j['access_token'];
+}
+
+// Stuurt een stil seintje naar de widgets; die halen daarna zelf het nieuwe saldo op.
+function stuur_push(array $widgets, bool $alleenTesten = false): array {
+    global $db;
+    $sa = firebase();
+    if (!$sa) return ['fout' => 'Geen Firebase-sleutel op de server.'];
+    $token = google_token($sa);
+    if (!$token) return ['fout' => 'Firebase gaf geen toegang.'];
+    $uitslag = [];
+    foreach ($widgets as $w) {
+        [$code, $antwoord] = http_post('https://fcm.googleapis.com/v1/projects/' . $sa['project_id'] . '/messages:send',
+            json_encode(['validate_only' => $alleenTesten, 'message' => [
+                'token' => $w['fcm'], 'data' => ['t' => 'ververs'], 'android' => ['priority' => 'high'],
+            ]]), ['Authorization: Bearer ' . $token, 'Content-Type: application/json']);
+        // Token bestaat niet meer (app verwijderd): niet meer naar sturen.
+        if (!$alleenTesten && ($code === 404 || ($code === 400 && str_contains($antwoord, 'registration token')))) {
+            $db->prepare('UPDATE widgets SET fcm = NULL WHERE id = ?')->execute([$w['id']]);
+        }
+        $uitslag[] = ['code' => $code, 'antwoord' => json_decode($antwoord, true)];
+    }
+    return $uitslag;
+}
+
 function gebruikers_lijst(): array {
     global $db;
     return array_map(fn($g) => ['id' => (int)$g['id'], 'naam' => $g['naam'], 'rol' => $g['rol']],
@@ -428,21 +552,31 @@ switch ($actie) {
            ->execute([$huidig + 1, $data, time()]);
         $db->exec('COMMIT');
         $transactie = false;
+        // Pas na het antwoord de widgets een seintje geven, zodat opslaan niet trager wordt.
+        $teSturen = widgets_met_wijziging($s ? json_decode($s['data'], true) : [], $in['data']);
+        if ($teSturen) {
+            register_shutdown_function(function () use ($teSturen) {
+                if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+                stuur_push($teSturen);
+            });
+        }
         out(['versie' => $huidig + 1]);
     }
 
     case 'apparaten': {
         need_ouder();
-        $rijen = $db->query('SELECT id, kid, aangemaakt, laatst FROM apparaten ORDER BY aangemaakt')->fetchAll();
+        $rijen = $db->query("SELECT id, kid, aangemaakt, laatst, 'tablet' AS soort FROM apparaten
+                             UNION ALL SELECT id, kid, aangemaakt, laatst, 'widget' AS soort FROM widgets ORDER BY aangemaakt")->fetchAll();
         out(['apparaten' => array_map(fn($r) => [
-            'id' => (int)$r['id'], 'kid' => $r['kid'], 'aangemaakt' => (int)$r['aangemaakt'], 'laatst' => (int)$r['laatst'],
+            'id' => (int)$r['id'], 'kid' => $r['kid'], 'aangemaakt' => (int)$r['aangemaakt'], 'laatst' => (int)$r['laatst'], 'soort' => $r['soort'],
         ], $rijen)]);
     }
 
     case 'ontkoppel': {
         need_post();
         need_ouder();
-        $db->prepare('DELETE FROM apparaten WHERE id = ?')->execute([(int)($in['id'] ?? 0)]);
+        $tabel = ($in['soort'] ?? '') === 'widget' ? 'widgets' : 'apparaten';
+        $db->prepare("DELETE FROM $tabel WHERE id = ?")->execute([(int)($in['id'] ?? 0)]);
         out(['ok' => true]);
     }
 
@@ -497,6 +631,61 @@ switch ($actie) {
         if (aantal_ouders($id) === 0) fail('Er moet altijd minstens één ouder zijn.');
         $db->prepare('DELETE FROM gebruikers WHERE id = ?')->execute([$id]);
         out(['gebruikers' => gebruikers_lijst()]);
+    }
+
+    // Widget koppelen, stap 1: pincode van een ouder → lijst met kinderen + een koppelkaartje (5 minuten geldig).
+    case 'widget_start': {
+        need_post();
+        $g = gebruiker_met_pin((string)($in['pin'] ?? ''));
+        if ($g['rol'] !== 'ouder') fail('Alleen papa of mama kan een widget koppelen.', 403);
+        $db->prepare('DELETE FROM kaartjes WHERE tot < ?')->execute([time()]);
+        $kaartje = bin2hex(random_bytes(16));
+        $db->prepare('INSERT INTO kaartjes (hash, tot) VALUES (?, ?)')->execute([hash('sha256', $kaartje), time() + 300]);
+        $s = lees_staat();
+        $kids = $s ? (json_decode($s['data'], true)['kids'] ?? []) : [];
+        out(['kaartje' => $kaartje, 'kids' => array_map(fn($k) => ['id' => $k['id'], 'naam' => $k['naam']], $kids)]);
+    }
+
+    // Stap 2: kind kiezen. De widget krijgt een sleutel die alleen mag lezen.
+    case 'widget_koppel': {
+        need_post();
+        $st = $db->prepare('DELETE FROM kaartjes WHERE hash = ? AND tot >= ?');
+        $st->execute([hash('sha256', (string)($in['kaartje'] ?? '')), time()]);
+        if ($st->rowCount() !== 1) fail('Vul eerst opnieuw de pincode in.', 403);
+        $kid = (string)($in['kid'] ?? '');
+        $s = lees_staat();
+        if (!$s || !samenvatting(json_decode($s['data'], true), $kid)) fail('Dit kind bestaat niet (meer).', 404);
+        $fcm = is_string($in['fcm'] ?? null) && strlen($in['fcm']) < 500 ? $in['fcm'] : null;
+        $sleutel = bin2hex(random_bytes(32));
+        $db->prepare('INSERT INTO widgets (token_hash, kid, fcm, aangemaakt, laatst) VALUES (?, ?, ?, ?, ?)')
+           ->execute([hash('sha256', $sleutel), $kid, $fcm, time(), time()]);
+        out(['sleutel' => $sleutel, 'kid' => $kid]);
+    }
+
+    case 'widget': {
+        $w = widget_wie();
+        if (!$w) fail('Deze widget is niet (meer) gekoppeld.', 401);
+        $s = lees_staat();
+        $sv = $s ? samenvatting(json_decode($s['data'], true), $w['kid']) : null;
+        if (!$sv) fail('Dit kind bestaat niet meer.', 410);
+        out($sv);
+    }
+
+    // Firebase geeft de widget soms een nieuw adres voor pushberichten.
+    case 'widget_fcm': {
+        need_post();
+        $w = widget_wie();
+        if (!$w) fail('Deze widget is niet (meer) gekoppeld.', 401);
+        $fcm = is_string($in['fcm'] ?? null) && strlen($in['fcm']) < 500 ? $in['fcm'] : null;
+        $db->prepare('UPDATE widgets SET fcm = ? WHERE id = ?')->execute([$fcm, $w['id']]);
+        out(['ok' => true]);
+    }
+
+    case 'widget_ontkoppel': {
+        need_post();
+        $w = widget_wie();
+        if ($w) $db->prepare('DELETE FROM widgets WHERE id = ?')->execute([$w['id']]);
+        out(['ok' => true]);
     }
 
     default:
