@@ -1,0 +1,10 @@
+# Muntjes-app (beloningen voor de kinderen). PHP draait in /srv/muntjes (container muntjes-php-1).
+# De database staat niet in deze map; /data en verborgen bestanden toch extra afgeschermd.
+muntjes.darkesttimes.nl {
+	root * /srv/sites/muntjes
+	header X-Robots-Tag noindex
+	respond /data* 404
+	respond /.* 404
+	php_fastcgi muntjes-php-1:9000
+	file_server
+}

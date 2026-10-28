@@ -1,0 +1,35 @@
+name: Deploy app
+
+on:
+  push:
+    branches: [ main ]   # main → muntjes.darkesttimes.nl
+    paths: [ "site/**" ] # alleen als de app zelf verandert
+  workflow_dispatch:      # handmatig starten mogelijk
+
+concurrency: deploy-app   # nooit twee deploys tegelijk
+
+jobs:
+  deploy:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: SSH-sleutel klaarzetten
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "Geen deploy-sleutel ingesteld"; exit 1; }
+          install -m 700 -d ~/.ssh
+          echo "$KEY" > ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519
+
+      # De sleutel mag op de server alleen rsync naar /srv/web/sites/muntjes (rrsync).
+      # data/ is het koppelpunt voor de database in de PHP-container: nooit weghalen.
+      - name: Naar de VPS kopiëren
+        run: |
+          rsync -rlptvz --delete --exclude "/data" \
+            ./site/ deploy@57.131.129.159:/

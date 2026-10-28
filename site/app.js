@@ -1,7 +1,15 @@
 'use strict';
 
-// Muntjes-app preview: ouder-app + kind-app met gedeelde gegevens.
-// Alles draait in de browser; de demo-stand wordt in localStorage bewaard.
+// Muntjes-app: ouder-app + kind-app met gedeelde gegevens.
+// Twee standen:
+// - demo (GitHub Pages, localhost): alles in deze browser, met demo-balk en voorbeeldgegevens;
+// - echt (muntjes.darkesttimes.nl): gegevens op de server via api.php,
+//   ouder logt in met de pincode, een tablet wordt eenmalig aan een kind gekoppeld.
+
+const PARAMS = new URLSearchParams(location.search);
+const DEMO = PARAMS.has('demo') || (!PARAMS.has('echt') && (/github\.io$/.test(location.hostname) || ['localhost', '127.0.0.1', ''].includes(location.hostname)));
+const DATA_KEYS = ['kids', 'klusjes', 'beloningen', 'tx', 'timers', 'kindMelden', 'maxWeek', 'nextId'];
+const TOKEN_SLEUTEL = 'muntjes-apparaat';
 
 const IC = {
   plate: 'M4 3v18M2 3v5a2 2 0 0 0 4 0V3M10 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
@@ -25,6 +33,7 @@ const IC = {
   music: 'M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0a3 3 0 1 1 6 0M20 16a3 3 0 1 1-6 0a3 3 0 1 1 6 0',
   ball: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
   chev: 'M9 6l6 6-6 6',
+  slot: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4',
   herhaal: 'M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3',
   minus: 'M5 12h14M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0',
   melden: 'M12 8v8M8 12h8M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0',
@@ -114,6 +123,12 @@ const periodeStart = (per) => (per === 'dag' ? dagStart() : weekStart());
 const perTekst = (x) => x.keer + '× per ' + x.per;
 const periodeNu = (per) => (per === 'dag' ? 'vandaag' : 'deze week');
 
+// Timers: een lopende timer onthoudt zijn eindtijd, zodat hij doorloopt als de app dicht is.
+// In de demo kan 1 seconde 1 minuut zijn.
+const snelheid = () => (DEMO && s.demoSnel ? 60 : 1);
+const timerRest = (t) => (t.status === 'loopt' ? Math.max(0, ((t.eind - Date.now()) / 1000) * snelheid()) : t.rest);
+const timerKlaar = (t) => t.status === 'loopt' && timerRest(t) <= 0;
+
 function tijdLabel(ts) {
   const d = new Date(ts);
   const nu = new Date();
@@ -199,11 +214,21 @@ function metHoeVaak(st) {
     ...st,
     klusjes: st.klusjes.map((k) => ({ keer: 1, per: 'dag', ...k })),
     beloningen: st.beloningen.map((b) => ({ keer: 1, per: 'week', ...b })),
-    kids: st.kids.map((k) => ({ thema: { noor: 'eenhoorn', daan: 'dino' }[k.id] || 'geen', ...k }))
+    kids: st.kids.map((k) => ({ thema: { noor: 'eenhoorn', daan: 'dino' }[k.id] || 'geen', ...k })),
+    // Timers onthouden nu hun eindtijd; oude demo-timers worden gepauzeerd.
+    timers: st.timers.filter((t) => t.status !== 'klaar').map((t) => (t.status === 'loopt' && !t.eind ? { ...t, status: 'pauze' } : t))
   };
 }
 
+// Begin van de echte app: standaardklusjes en -beloningen, nog geen kinderen.
+function startData() {
+  const b = beginState();
+  return { kids: [], klusjes: b.klusjes, beloningen: b.beloningen, tx: [], timers: [], kindMelden: {}, maxWeek: 7, nextId: 1 };
+}
+const dataVan = (st) => Object.fromEntries(DATA_KEYS.map((k) => [k, st[k]]));
+
 function laad() {
+  if (!DEMO) return { ...beginState(), ...startData(), tabletKid: null, login: { stap: 'kies', pin: '', fout: '' } };
   try {
     const raw = localStorage.getItem(OPSLAG);
     if (raw) {
@@ -215,20 +240,147 @@ function laad() {
 }
 
 function bewaar() {
+  if (!DEMO) return;
   try { localStorage.setItem(OPSLAG, JSON.stringify({ ...s, toast: null, sheet: null, edit: null })); } catch (e) { /* negeren */ }
 }
 
 let s = laad();
-let weergave = ['ouder', 'kind'].includes(new URLSearchParams(location.search).get('view')) ? new URLSearchParams(location.search).get('view') : 'beide';
+let weergave = ['ouder', 'kind'].includes(PARAMS.get('view')) ? PARAMS.get('view') : 'beide';
 let toastTimer = null;
-// ?kind=<id> koppelt de tablet aan een kind (handig op de echte tablet).
-const kindUitUrl = new URLSearchParams(location.search).get('kind');
-if (kindUitUrl && s.kids.some((k) => k.id === kindUitUrl)) s = { ...s, tabletKid: kindUitUrl };
+// Demo: ?kind=<id> toont de tablet van dat kind.
+const kindUitUrl = PARAMS.get('kind');
+if (DEMO && kindUitUrl && s.kids.some((k) => k.id === kindUitUrl)) s = { ...s, tabletKid: kindUitUrl };
 
 function zet(patch) {
-  s = { ...s, ...(typeof patch === 'function' ? patch(s) : patch) };
+  const oud = s;
+  const delta = typeof patch === 'function' ? patch(s) : patch;
+  s = { ...s, ...delta };
   bewaar();
+  if (!DEMO && rol && DATA_KEYS.some((k) => k in delta && delta[k] !== oud[k])) {
+    onbevestigd.push(patch);
+    synchroniseer();
+  }
   render();
+}
+
+// ---------- server (alleen in de echte app) ----------
+let rol = null;          // 'ouder' of 'kind' zodra ingelogd of gekoppeld
+let geladen = DEMO;
+let versie = 0;          // versie van de gegevens op de server
+let onbevestigd = [];    // wijzigingen die de server nog niet heeft bevestigd
+let bezig = false;
+
+function leesToken() {
+  try { return localStorage.getItem(TOKEN_SLEUTEL) || ''; } catch (e) { return ''; }
+}
+function zetToken(t) {
+  try { if (t) localStorage.setItem(TOKEN_SLEUTEL, t); else localStorage.removeItem(TOKEN_SLEUTEL); } catch (e) { /* negeren */ }
+}
+
+async function api(actie, body, query = '') {
+  const headers = {};
+  const token = leesToken();
+  if (token) headers['X-Apparaat'] = token;
+  const init = { headers, credentials: 'same-origin', cache: 'no-store' };
+  if (body !== undefined) {
+    init.method = 'POST';
+    headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  try {
+    const res = await fetch('api.php?actie=' + actie + query, init);
+    let data = null;
+    if (res.status !== 204) { try { data = await res.json(); } catch (e) { /* geen JSON */ } }
+    return { status: res.status, ok: res.ok, data: data || {} };
+  } catch (e) {
+    return { status: 0, ok: false, data: {} };
+  }
+}
+
+// Stuurt de gegevens naar de server. Was iemand anders net eerder (409), dan nemen we zijn
+// versie over en voeren we onze eigen wijzigingen er opnieuw op uit.
+async function synchroniseer() {
+  if (bezig) return;
+  bezig = true;
+  try {
+    while (onbevestigd.length) {
+      const n = onbevestigd.length;
+      const r = await api('opslaan', { versie, data: dataVan(s) });
+      if (r.ok) {
+        versie = r.data.versie;
+        onbevestigd.splice(0, n);
+      } else if (r.status === 409) {
+        s = { ...s, ...(r.data.data || startData()) };
+        versie = r.data.versie;
+        onbevestigd.forEach((p) => { s = { ...s, ...(typeof p === 'function' ? p(s) : p) }; });
+        render();
+      } else if (r.status === 401) {
+        afgemeld();
+        return;
+      } else {
+        if (r.status === 403) onbevestigd = [];
+        melding(r.data.fout || 'Niet opgeslagen: geen verbinding. Ik probeer het zo opnieuw.');
+        break;
+      }
+    }
+  } finally {
+    bezig = false;
+  }
+  if (!onbevestigd.length && versie === 0) haal(true);
+}
+
+async function haal(alles) {
+  if (!rol || bezig) return;
+  if (onbevestigd.length) { synchroniseer(); return; }
+  const r = await api('staat', undefined, '&sinds=' + (alles ? -1 : versie));
+  if (r.status === 401) { afgemeld(); return; }
+  if (r.status !== 200 || onbevestigd.length || bezig) return;
+  versie = r.data.versie;
+  if (r.data.data) s = { ...s, ...r.data.data };
+  if (rol === 'kind' && !kidVan(s.tabletKid)) { zetToken(''); afgemeld(); return; }
+  render();
+}
+
+function afgemeld() {
+  rol = null;
+  versie = 0;
+  onbevestigd = [];
+  geladen = true;
+  s = { ...s, ...startData(), tabletKid: null, sheet: null, edit: null, scherm: 'melden', login: { stap: 'kies', pin: '', fout: '' } };
+  render();
+}
+
+async function start() {
+  const r = await api('status');
+  if (r.status === 0) {
+    geladen = true;
+    s = { ...s, login: { stap: 'kies', pin: '', fout: 'Geen verbinding met de server. Controleer het internet.' } };
+    render();
+    return;
+  }
+  if (r.data.rol !== 'ouder' && r.data.rol !== 'kind') {
+    if (leesToken()) zetToken('');   // tablet was ontkoppeld
+    afgemeld();
+    return;
+  }
+  rol = r.data.rol;
+  s = { ...s, login: null, tabletKid: rol === 'kind' ? r.data.kid : null };
+  await haal(true);
+  if (!rol) return;
+  if (rol === 'ouder' && versie === 0) {
+    // Allereerste keer: standaardklusjes en -beloningen op de server zetten.
+    s = { ...s, ...startData() };
+    onbevestigd.push({});
+    synchroniseer();
+  }
+  geladen = true;
+  if (rol === 'ouder' && s.scherm === 'beheer') laadApparaten();
+  render();
+}
+
+async function laadApparaten() {
+  const r = await api('apparaten');
+  if (r.ok) zet({ apparaten: r.data.apparaten || [] });
 }
 
 function melding(tekst) {
@@ -300,15 +452,22 @@ const acties = {
     window.scrollTo(0, 0);
   },
   reset() {
+    if (!DEMO) return;
     s = beginState();
     bewaar();
     melding('Demo is teruggezet');
   },
   tablet(d) { zet({ tabletKid: d.id }); },
-  nav(d) { zet({ scherm: d.id, sheet: null }); },
+  nav(d) {
+    zet({ scherm: d.id, sheet: null });
+    if (!DEMO && d.id === 'beheer') laadApparaten();
+  },
   sluit() { zet({ sheet: null, bericht: '', ovZeker: false }); },
 
-  klusOpen(d) { zet({ sheet: { type: 'klus', id: d.id }, bericht: '' }); },
+  klusOpen(d) {
+    if (!s.kids.length) { melding('Voeg eerst een kind toe in Beheer'); return; }
+    zet({ sheet: { type: 'klus', id: d.id }, bericht: '' });
+  },
   klusKies(d) {
     const klus = s.sheet && klusVan(s.sheet.id);
     const kid = kidVan(d.id);
@@ -318,7 +477,10 @@ const acties = {
     melding('+' + klus.waarde + ' voor ' + kid.naam + ' · ' + klus.naam);
   },
 
-  overigOpen() { zet({ sheet: { type: 'overig' }, ovSign: 1, ovAmt: 1, ovReden: '', ovZeker: false }); },
+  overigOpen() {
+    if (!s.kids.length) { melding('Voeg eerst een kind toe in Beheer'); return; }
+    zet({ sheet: { type: 'overig' }, ovKid: kidVan(s.ovKid) ? s.ovKid : s.kids[0].id, ovSign: 1, ovAmt: 1, ovReden: '', ovZeker: false });
+  },
   ovKid(d) { zet({ ovKid: d.id, ovAmt: 1, ovZeker: false }); },
   ovPlus() { zet({ ovSign: 1, ovZeker: false }); },
   ovMin() { zet({ ovSign: -1, ovAmt: 1, ovZeker: false }); },
@@ -347,26 +509,39 @@ const acties = {
     const b = isKlus ? null : belVan(t.ref);
     zet((st) => ({
       tx: st.tx.map((x) => (x.id === t.id ? { ...x, status: ok ? 'goed' : 'afgewezen' } : x)),
-      timers: ok && b && b.duur ? [...st.timers, { id: 't' + t.id, kid: t.kid, ref: b.id, naam: b.naam, totaal: b.duur * 60, rest: b.duur * 60, status: 'wacht' }] : st.timers
+      timers: ok && b && b.duur ? [...st.timers, { id: 't' + t.id, kid: t.kid, ref: b.id, naam: b.naam, totaal: b.duur * 60, rest: b.duur * 60, status: 'wacht', eind: null }] : st.timers
     }));
     if (isKlus) melding(ok ? '+' + t.amount + ' voor ' + kid.naam + ' · ' + t.label : kid.naam + ': melding afgewezen');
     else melding(ok ? kid.naam + ': ' + t.label + ' goedgekeurd' + (b && b.duur ? ' · timer klaar' : '') : kid.naam + ': afgewezen, muntjes terug');
   },
 
   timer(d) {
+    const nu = Date.now();
+    const f = snelheid();
     zet((st) => ({
       timers: st.timers
         .filter((t) => !(t.id === d.id && d.x === 'stop'))
         .map((t) => {
           if (t.id !== d.id) return t;
-          if (d.x === 'start') return { ...t, status: 'loopt' };
-          if (d.x === 'pauze') return { ...t, status: t.status === 'loopt' ? 'pauze' : 'loopt' };
-          if (d.x === 'plus') return { ...t, rest: t.rest + 300, totaal: t.totaal + 300, status: t.status === 'klaar' ? 'loopt' : t.status };
+          const rest = timerRest(t);
+          if (d.x === 'start') return { ...t, status: 'loopt', eind: nu + (rest * 1000) / f };
+          if (d.x === 'pauze') return t.status === 'loopt' ? { ...t, status: 'pauze', rest, eind: null } : { ...t, status: 'loopt', eind: nu + (rest * 1000) / f };
+          if (d.x === 'plus') {
+            return t.status === 'loopt'
+              ? { ...t, totaal: t.totaal + 300, eind: Math.max(t.eind, nu) + 300000 / f }
+              : { ...t, rest: rest + 300, totaal: t.totaal + 300 };
+          }
           return t;
         })
     }));
   },
-  snel() { zet({ demoSnel: !s.demoSnel }); },
+  snel() {
+    // Lopende timers houden hun resttijd als de demo-snelheid wisselt.
+    const nu = Date.now();
+    const nieuw = s.demoSnel ? 1 : 60;
+    const timers = s.timers.map((t) => (t.status === 'loopt' ? { ...t, eind: nu + (timerRest(t) * 1000) / nieuw } : t));
+    zet({ demoSnel: !s.demoSnel, timers });
+  },
   meldToggle(d) { zet((st) => ({ kindMelden: { ...st.kindMelden, [d.id]: !st.kindMelden[d.id] } })); },
   maxWeek(d) { zet({ maxWeek: Math.min(30, Math.max(1, s.maxWeek + (d.x === '+' ? 1 : -1))) }); },
 
@@ -418,21 +593,65 @@ const acties = {
     if (!e || !e.id) return;
     if (!e.zeker) { zet({ edit: { ...e, zeker: true } }); return; }
     if (e.soort === 'kid') {
-      if (s.kids.length <= 1) return;
+      if (DEMO && s.kids.length <= 1) return;
       zet((st) => {
         const kids = st.kids.filter((k) => k.id !== e.id);
         return {
           kids,
           tx: st.tx.filter((t) => t.kid !== e.id),
           timers: st.timers.filter((t) => t.kid !== e.id),
-          tabletKid: st.tabletKid === e.id ? kids[0].id : st.tabletKid,
-          ovKid: st.ovKid === e.id ? kids[0].id : st.ovKid,
+          tabletKid: st.tabletKid === e.id ? (kids[0] || {}).id || null : st.tabletKid,
+          ovKid: st.ovKid === e.id ? (kids[0] || {}).id || null : st.ovKid,
           edit: null
         };
       });
     } else if (e.soort === 'klus') zet((st) => ({ klusjes: st.klusjes.filter((k) => k.id !== e.id), edit: null }));
     else zet((st) => ({ beloningen: st.beloningen.filter((b) => b.id !== e.id), edit: null }));
     melding('Verwijderd: ' + e.naam);
+  },
+
+  // Inloggen, tablet koppelen en pincode (echte app)
+  welkom(d) { zet({ login: { stap: 'pin', doel: d.id, pin: '', fout: '' } }); },
+  terug() { zet({ login: { stap: 'kies', pin: '', fout: '' } }); },
+  toets(d) {
+    const l = s.login;
+    if (!l || l.stap !== 'pin' || l.bezig) return;
+    if (d.id === 'wis') zet({ login: { ...l, pin: l.pin.slice(0, -1), fout: '' } });
+    else if (l.pin.length < 8) zet({ login: { ...l, pin: l.pin + d.id, fout: '' } });
+  },
+  async pinOk() {
+    const l = s.login;
+    if (!l || l.stap !== 'pin' || l.bezig) return;
+    if (l.pin.length < 4) { zet({ login: { ...l, fout: 'De pincode heeft minstens 4 cijfers.' } }); return; }
+    zet({ login: { ...l, bezig: true } });
+    const r = await api(l.doel === 'ouder' ? 'inloggen' : 'koppelstart', { pin: l.pin });
+    if (!r.ok) { zet({ login: { ...l, pin: '', bezig: false, fout: r.data.fout || 'Geen verbinding met de server.' } }); return; }
+    if (l.doel === 'ouder') { await start(); return; }
+    const kids = r.data.kids || [];
+    zet({ login: { stap: 'kind', kids, pin: '', fout: kids.length ? '' : 'Er zijn nog geen kinderen. Voeg ze eerst toe in de ouder-app (Beheer).' } });
+  },
+  async koppel(d) {
+    const r = await api('koppel', { kid: d.id });
+    if (!r.ok) { zet({ login: { ...s.login, fout: r.data.fout || 'Koppelen is niet gelukt.' } }); return; }
+    zetToken(r.data.token);
+    await start();
+  },
+  async vergrendel() {
+    await api('uitloggen', {});
+    rol = null;
+    await start();
+  },
+  async ontkoppel(d) {
+    const r = await api('ontkoppel', { id: Number(d.id) });
+    if (r.ok) { melding('Tablet ontkoppeld'); laadApparaten(); }
+  },
+  pinOpen() { zet({ sheet: { type: 'pin' }, pinOud: '', pinNieuw: '', pinFout: '' }); },
+  async pinOpslaan() {
+    if (!/^\d{4,8}$/.test(s.pinNieuw || '')) { zet({ pinFout: 'De nieuwe pincode moet uit 4 tot 8 cijfers bestaan.' }); return; }
+    const r = await api('pin', { oud: s.pinOud || '', nieuw: s.pinNieuw });
+    if (!r.ok) { zet({ pinFout: r.data.fout || 'Geen verbinding met de server.' }); return; }
+    zet({ sheet: null, pinOud: '', pinNieuw: '', pinFout: '' });
+    melding('Pincode gewijzigd');
   },
 
   beloning(d) {
@@ -484,7 +703,10 @@ function renderOuder() {
   return `
     <div class="p-head">
       <div class="p-brand">${coin(28)}<span>Muntjes</span></div>
-      <span class="p-title">${titels[s.scherm]}</span>
+      <span class="p-rechts">
+        <span class="p-title">${titels[s.scherm]}</span>
+        ${DEMO ? '' : `<button type="button" class="p-slot" data-a="vergrendel" aria-label="Vergrendelen">${icon(IC.slot, 22, 1.8)}</button>`}
+      </span>
     </div>
     <div class="p-body" data-scroll="ouder">${schermen[s.scherm]()}</div>
     <nav class="p-nav" aria-label="Ouder-app">
@@ -495,10 +717,16 @@ function renderOuder() {
         </button>`).join('')}
     </nav>
     ${s.toast ? `<div class="toast" role="status">${coin(22)}<span>${esc(s.toast)}</span></div>` : ''}
-    ${sheetKlus()}${sheetOverig()}${sheetBewerk()}`;
+    ${sheetKlus()}${sheetOverig()}${sheetBewerk()}${sheetPin()}`;
 }
 
 function schermMelden() {
+  if (!s.kids.length) {
+    return `<div class="empty">
+      <p style="margin:0 0 12px">Welkom! Voeg eerst je kinderen toe. Klusjes en beloningen staan al klaar en kun je aanpassen in Beheer.</p>
+      <button type="button" class="btn btn-primary" data-a="nieuw" data-x="kid">+ Kind toevoegen</button>
+    </div>`;
+  }
   const kaarten = s.kids.map((k) => {
     const st = stats(k.id);
     return `<div class="kcard">
@@ -559,12 +787,12 @@ function schermTimers() {
   const lopend = s.timers.filter((t) => t.status !== 'wacht');
   const wachtHtml = wacht.map((t) => `
     <div class="tcard">
-      <div class="grow"><b>${esc(label(t))}</b><div class="tnum sm">${mmss(t.rest)}</div></div>
+      <div class="grow"><b>${esc(label(t))}</b><div class="tnum sm">${mmss(timerRest(t))}</div></div>
       <button type="button" class="btn btn-primary" data-a="timer" data-id="${t.id}" data-x="start">Start</button>
     </div>`).join('');
   const lopendHtml = lopend.map((t) => {
-    const klaar = t.status === 'klaar';
-    const pct = t.totaal ? Math.round((t.rest / t.totaal) * 100) : 0;
+    const klaar = timerKlaar(t);
+    const pct = t.totaal ? Math.round((timerRest(t) / t.totaal) * 100) : 0;
     const status = klaar ? 'Tijd is om!' : t.status === 'pauze' ? 'Gepauzeerd' : 'Loopt';
     const knoppen = klaar
       ? `<div class="row2">
@@ -578,7 +806,7 @@ function schermTimers() {
         </div>`;
     return `<div class="tcard col${klaar ? ' done' : ''}">
       <div class="tline"><b>${esc(label(t))}</b><span class="muted">${status}</span></div>
-      <div class="tnum">${mmss(t.rest)}</div>
+      <div class="tnum">${mmss(timerRest(t))}</div>
       <div class="tbar"><div style="width:${pct}%"></div></div>
       ${knoppen}
     </div>`;
@@ -588,12 +816,12 @@ function schermTimers() {
     ${wacht.length ? `<div class="stack">${wachtHtml}</div>` : '<p class="muted">Na goedkeuring van tablet- of tv-tijd verschijnt hier een timer.</p>'}
     <h2 class="sec sp">Lopende timers</h2>
     ${lopend.length ? `<div class="stack">${lopendHtml}</div>` : '<p class="muted">Er loopt nu geen timer.</p>'}
-    <div class="lijst sp">
+    ${DEMO ? `<div class="lijst sp">
       <button type="button" class="lrij" data-a="snel" aria-pressed="${s.demoSnel}">
         <span class="col"><span>Demo-snelheid</span><small>1 seconde = 1 minuut</small></span>
         <span class="switch${s.demoSnel ? ' on' : ''}"><span></span></span>
       </button>
-    </div>`;
+    </div>` : ''}`;
 }
 
 function schermBeheer() {
@@ -637,8 +865,25 @@ function schermBeheer() {
         <span class="stepnum sm" aria-live="polite">${s.maxWeek}</span>
         <button type="button" class="stepbtn sm" aria-label="Meer" data-a="maxWeek" data-x="+">+</button>
       </div>
-      <div class="lrij"><span class="grow">Pincode</span><span class="r">Komt in de echte app</span></div>
-    </div>`;
+      ${DEMO
+        ? '<div class="lrij"><span class="grow">Pincode</span><span class="r">Alleen in de echte app</span></div>'
+        : `<button type="button" class="lrij" data-a="pinOpen"><span class="grow">Pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>`}
+    </div>
+    ${DEMO ? '' : `
+    <h2 class="sec">Gekoppelde tablets</h2>
+    <div class="lijst">
+      ${(s.apparaten || []).length
+        ? s.apparaten.map((a) => {
+          const k = kidVan(a.kid);
+          return `<div class="lrij">
+            ${k ? avatar(k) : ''}
+            <span class="col"><span>${k ? k.naam : 'Verwijderd kind'}</span><small>Gekoppeld ${tijdLabel(a.aangemaakt * 1000)}${a.laatst ? ' · laatst gezien ' + tijdLabel(a.laatst * 1000) : ''}</small></span>
+            <button type="button" class="btn btn-outline klein" data-a="ontkoppel" data-id="${a.id}">Ontkoppelen</button>
+          </div>`;
+        }).join('')
+        : '<div class="lrij"><span class="r">Nog geen tablets. Open muntjes.darkesttimes.nl op de tablet en kies "Tablet van een kind".</span></div>'}
+    </div>
+    <button type="button" class="btn btn-ink vol" data-a="vergrendel">${icon(IC.slot, 18, 2)} Vergrendelen</button>`}`;
 }
 
 function sheetBewerk() {
@@ -674,7 +919,7 @@ function sheetBewerk() {
       ${isKlus ? '' : `<div class="lbl">Timer na goedkeuring</div>
         <div class="pills wrap">${DUREN.map((m) => `<button type="button" class="pill${(e.duur || 0) === m ? ' on' : ''}" aria-pressed="${(e.duur || 0) === m}" data-a="editVeld" data-x="duur" data-id="${m}">${m ? m + ' min' : 'Geen'}</button>`).join('')}</div>`}`;
   }
-  const kanWeg = e.id && !(e.soort === 'kid' && s.kids.length <= 1);
+  const kanWeg = e.id && !(DEMO && e.soort === 'kid' && s.kids.length <= 1);
   const waarschuwing = e.soort === 'kid'
     ? 'Hiermee verdwijnen ook alle muntjes en de geschiedenis van ' + esc(e.naam) + '. Tik nog een keer op Verwijderen.'
     : 'Weet je het zeker? Tik nog een keer op Verwijderen. De geschiedenis blijft bewaard.';
@@ -692,6 +937,70 @@ function sheetBewerk() {
         <button type="button" class="btn wide btn-primary" data-a="editOpslaan" ${(e.naam || '').trim() ? '' : 'disabled'}>Opslaan</button>
       </div>
     </div>
+  </div>`;
+}
+
+function sheetPin() {
+  if (!s.sheet || s.sheet.type !== 'pin') return '';
+  return `<div class="sheet-wrap">
+    <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-pin">
+      <div class="sh-title" id="sh-pin">Pincode wijzigen</div>
+      <label class="lbl" for="pin-oud">Huidige pincode</label>
+      <input class="inp" id="pin-oud" type="password" inputmode="numeric" autocomplete="current-password" data-input="pinOud" value="${esc(s.pinOud || '')}">
+      <label class="lbl" for="pin-nieuw">Nieuwe pincode (4 tot 8 cijfers)</label>
+      <input class="inp" id="pin-nieuw" type="password" inputmode="numeric" autocomplete="new-password" data-input="pinNieuw" value="${esc(s.pinNieuw || '')}">
+      ${s.pinFout ? `<div class="warn" role="alert">${esc(s.pinFout)}</div>` : ''}
+      <div class="flex">
+        <button type="button" class="btn btn-soft" data-a="sluit">Annuleren</button>
+        <button type="button" class="btn wide btn-primary" data-a="pinOpslaan">Opslaan</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Startscherm van de echte app: ouder inloggen of een tablet aan een kind koppelen.
+function renderWelkom() {
+  const l = s.login || { stap: 'kies', pin: '', fout: '' };
+  let inhoud;
+  if (!geladen) {
+    inhoud = '<p class="w-sub">Even laden…</p>';
+  } else if (l.stap === 'kies') {
+    inhoud = `
+      <p class="w-sub">Wie gebruikt dit apparaat?</p>
+      <button type="button" class="w-keuze" data-a="welkom" data-id="ouder">
+        <span class="icobox">${icon(IC.slot, 26, 1.8)}</span>
+        <span class="col"><b>Papa of mama</b><small>Inloggen met de pincode</small></span>
+      </button>
+      <button type="button" class="w-keuze" data-a="welkom" data-id="koppel">
+        <span class="icobox geel">${icon(IC.tablet, 26, 1.8)}</span>
+        <span class="col"><b>Tablet van een kind</b><small>Eenmalig koppelen met de pincode</small></span>
+      </button>`;
+  } else if (l.stap === 'pin') {
+    const stippen = Array.from({ length: Math.max(4, l.pin.length) }, (_, i) => `<i class="${i < l.pin.length ? 'vol' : ''}"></i>`).join('');
+    const toetsen = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'wis', '0', 'ok'].map((k) => {
+      if (k === 'ok') return `<button type="button" class="pk ok" data-a="pinOk" ${l.bezig ? 'disabled' : ''}>OK</button>`;
+      if (k === 'wis') return '<button type="button" class="pk" data-a="toets" data-id="wis" aria-label="Wissen">⌫</button>';
+      return `<button type="button" class="pk" data-a="toets" data-id="${k}">${k}</button>`;
+    }).join('');
+    inhoud = `
+      <p class="w-sub">${l.doel === 'ouder' ? 'Vul je pincode in' : 'Pincode van papa of mama'}</p>
+      <div class="pin-stip" role="status" aria-label="${l.pin.length} cijfers ingevuld">${stippen}</div>
+      <div class="pinpad">${toetsen}</div>
+      <button type="button" class="btn btn-soft" data-a="terug">Terug</button>`;
+  } else {
+    inhoud = `
+      <p class="w-sub">Van wie is deze tablet?</p>
+      <div class="stack">${(l.kids || []).map((k) => `
+        <button type="button" class="kidpick" style="border-color:${k.kleur};background:${k.zacht}" data-a="koppel" data-id="${esc(k.id)}">
+          ${avatar(k, 40)}<span class="col"><b>${esc(k.naam)}</b></span>
+        </button>`).join('')}</div>
+      <button type="button" class="btn btn-soft" data-a="terug">Terug</button>`;
+  }
+  return `<div class="welkom">
+    <div class="w-logo">${coin(56)}<h1>Muntjes</h1></div>
+    ${inhoud}
+    ${l.fout ? `<p class="warn" role="alert">${esc(l.fout)}</p>` : ''}
   </div>`;
 }
 
@@ -778,6 +1087,7 @@ const STATUS_MELD = { aangevraagd: 'Gemeld', goed: 'Goedgekeurd!', afgewezen: 'N
 
 function renderKind() {
   const kind = kidVan(s.tabletKid);
+  if (!kind) return '';
   const st = stats(kind.id);
   const v = valuta(kind);
   const thema = MASCOTTE[kind.thema] ? kind.thema : 'geen';
@@ -928,12 +1238,15 @@ function render() {
   const focus = focusSleutel();
   const scrolls = [...document.querySelectorAll('[data-scroll]')].map((el) => [el.dataset.scroll, el.scrollTop]);
 
+  if (!DEMO) weergave = rol === 'kind' ? 'kind' : 'ouder';
   document.body.classList.toggle('bare', weergave !== 'beide');
-  $('#bar').innerHTML = renderBar();
+  document.body.classList.toggle('echt', !DEMO);
+  $('#bar').hidden = !DEMO;
+  $('#bar').innerHTML = DEMO ? renderBar() : '';
   $('#col-ouder').hidden = weergave === 'kind';
   $('#col-kind').hidden = weergave === 'ouder';
-  $('#ouder').innerHTML = renderOuder();
-  $('#kind').innerHTML = renderKind();
+  $('#ouder').innerHTML = weergave === 'kind' ? '' : !DEMO && rol !== 'ouder' ? renderWelkom() : renderOuder();
+  $('#kind').innerHTML = weergave === 'ouder' ? '' : renderKind();
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
 
   scrolls.forEach(([k, top]) => { const el = document.querySelector(`[data-scroll="${k}"]`); if (el) el.scrollTop = top; });
@@ -967,6 +1280,12 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (!DEMO && !rol && s.login && s.login.stap === 'pin') {
+    if (/^\d$/.test(e.key)) acties.toets({ id: e.key });
+    else if (e.key === 'Backspace') acties.toets({ id: 'wis' });
+    else if (e.key === 'Enter') acties.pinOk();
+    return;
+  }
   if (e.key !== 'Escape') return;
   if (s.edit) acties.editSluit();
   else if (s.sheet) acties.sluit();
@@ -974,27 +1293,34 @@ document.addEventListener('keydown', (e) => {
 
 // Andere tab met dezelfde preview open? Dan meelopen.
 window.addEventListener('storage', (e) => {
-  if (e.key === OPSLAG) { s = laad(); render(); }
+  if (DEMO && e.key === OPSLAG) { s = laad(); render(); }
 });
 window.addEventListener('resize', () => {
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
 });
 
+// Elke seconde: lopende timers bijwerken en piepen (alleen bij de ouder) als de tijd om is.
+const gepiept = new Set();
 setInterval(() => {
-  if (!s.timers.some((t) => t.status === 'loopt')) return;
-  const stap = s.demoSnel ? 60 : 1;
-  let klaar = null;
-  const timers = s.timers.map((t) => {
-    if (t.status !== 'loopt') return t;
-    const rest = t.rest - stap;
-    if (rest <= 0) { klaar = t; return { ...t, rest: 0, status: 'klaar' }; }
-    return { ...t, rest };
+  const lopend = s.timers.filter((t) => t.status === 'loopt');
+  if (!lopend.length || (!DEMO && rol !== 'ouder')) return;
+  lopend.forEach((t) => {
+    const sleutel = t.id + ':' + t.eind;
+    if (timerKlaar(t) && !gepiept.has(sleutel)) {
+      gepiept.add(sleutel);
+      piep();
+      melding('Tijd is om: ' + ((kidVan(t.kid) || {}).naam || '') + ' · ' + t.naam);
+    }
   });
-  zet({ timers });
-  if (klaar) {
-    piep();
-    melding('Tijd is om: ' + kidVan(klaar.kid).naam + ' · ' + klaar.naam);
-  }
+  render();
 }, 1000);
+
+if (!DEMO) {
+  start();
+  // Wijzigingen van het andere apparaat ophalen (alleen als de app in beeld is).
+  setInterval(() => { if (document.visibilityState === 'visible') haal(); }, 4000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') haal(); });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 
 render();

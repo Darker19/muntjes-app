@@ -1,0 +1,18 @@
+# Muntjes-app: PHP voor api.php.
+# Bestanden in /srv/web/sites/muntjes (gedeployed vanuit GitHub), database + logins in ./data.
+# De data-map is alleen voor PHP zichtbaar. De startpincode staat in .env (START_PIN).
+services:
+  php:
+    image: php:8.4-fpm-alpine
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - /srv/web/sites/muntjes:/srv/sites/muntjes:ro
+      - ./data:/srv/sites/muntjes/data
+      - ./php.ini:/usr/local/etc/php/conf.d/muntjes.ini:ro
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
