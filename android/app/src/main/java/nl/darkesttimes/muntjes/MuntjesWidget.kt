@@ -92,6 +92,14 @@ class MuntjesWidget : AppWidgetProvider() {
             v.setOnClickPendingIntent(R.id.widget, PendingIntent.getActivity(c, 0, tik,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
 
+            // Nieuwe versie van de widget-app? Label "Update" → tik opent de app met de update-knop.
+            val update = Update.beschikbaar(c) != null
+            v.setViewVisibility(R.id.update, if (update) View.VISIBLE else View.GONE)
+            if (update) {
+                v.setOnClickPendingIntent(R.id.update, PendingIntent.getActivity(c, 1, Intent(c, MainActivity::class.java),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            }
+
             if (sleutel == null || d == null) {
                 v.setTextViewText(R.id.naam, "Muntjes")
                 v.setTextViewText(R.id.saldo, "–")

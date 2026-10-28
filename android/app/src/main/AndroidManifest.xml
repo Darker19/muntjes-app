@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Om zelf een nieuwe versie van deze app te kunnen installeren (Android vraagt altijd om bevestiging) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:allowBackup="false"
@@ -30,6 +32,17 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/muntjes_widget_info" />
         </receiver>
+
+        <!-- Geeft de gedownloade update door aan het installatiescherm -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="nl.darkesttimes.muntjes.bestanden"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/bestanden" />
+        </provider>
 
         <!-- Seintjes van de server (Firebase) -->
         <service

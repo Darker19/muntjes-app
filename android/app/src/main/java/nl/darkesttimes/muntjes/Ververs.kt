@@ -48,7 +48,12 @@ object Ververs {
 
 class VerversWerk(c: Context, p: WorkerParameters) : CoroutineWorker(c, p) {
     override suspend fun doWork(): Result {
-        withContext(Dispatchers.IO) { Ververs.direct(applicationContext) }
+        withContext(Dispatchers.IO) {
+            Ververs.direct(applicationContext)
+            val wasBekend = Update.beschikbaar(applicationContext) != null
+            // Om de 6 uur bij GitHub kijken of er een nieuwe widget-app is
+            if ((Update.controleer(applicationContext) != null) != wasBekend) MuntjesWidget.tekenAlle(applicationContext)
+        }
         return Result.success()
     }
 }

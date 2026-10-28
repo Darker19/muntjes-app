@@ -25,7 +25,17 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        Update.ruimOp(this)
         toon()
+        // Bij openen altijd even bij GitHub kijken of er een nieuwe versie is.
+        val wasBekend = Update.beschikbaar(this)?.versie
+        thread {
+            val nieuw = Update.controleer(this, altijd = true)?.versie
+            if (nieuw != wasBekend) runOnUiThread {
+                toon()
+                MuntjesWidget.tekenAlle(this)
+            }
+        }
     }
 
     private fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
@@ -53,7 +63,35 @@ class MainActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(lijst) })
         lijst.addView(tekst("Muntjes widget", 26f, true))
         status = tekst("", 15f).apply { setTextColor(0xFF8C1D16.toInt()) }
+        Update.beschikbaar(this)?.let { toonUpdate(it) }
         if (Opslag.sleutel(this) == null) toonKoppelen() else toonGekoppeld()
+        lijst.addView(tekst("Versie 1.${Update.huidigeVersie(this)}", 13f).apply { setTextColor(0xFF5B6675.toInt()) })
+    }
+
+    private fun toonUpdate(info: Update.Info) {
+        lijst.addView(tekst("Er is een nieuwe versie (1.${info.versie})", 18f, true).apply { setTextColor(0xFF2457C5.toInt()) })
+        val updateStatus = tekst("", 15f)
+        lijst.addView(knop("Update installeren") {
+            if (!Update.magInstalleren(this)) {
+                updateStatus.text = "Sta eerst toe dat deze app updates mag installeren (schakelaar aanzetten), en tik dan nog een keer op Update installeren."
+                startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+                return@knop
+            }
+            updateStatus.text = "Bezig met downloaden…"
+            thread {
+                try {
+                    val f = Update.download(this, info)
+                    runOnUiThread {
+                        updateStatus.text = "Tik op Installeren of Bijwerken in het volgende scherm."
+                        Update.installeer(this, f)
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread { updateStatus.text = e.message ?: "Downloaden is niet gelukt." }
+                }
+            }
+        })
+        lijst.addView(updateStatus)
+        lijst.addView(tekst("Lukt het niet? Zet in Family Link \"Apps uit onbekende bronnen\" even aan.", 13f).apply { setTextColor(0xFF5B6675.toInt()) })
     }
 
     private fun toonKoppelen() {
