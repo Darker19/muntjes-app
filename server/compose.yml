@@ -1,15 +1,19 @@
 # Muntjes-app: PHP voor api.php.
 # Bestanden in /srv/web/sites/muntjes (gedeployed vanuit GitHub), database + logins in ./data.
 # De data-map is alleen voor PHP zichtbaar. De startpincode staat in .env (START_PIN).
+# firebase.json = geheime sleutel om pushberichten naar de widget te sturen (niet in GitHub).
 services:
   php:
     image: php:8.4-fpm-alpine
     restart: unless-stopped
     env_file: .env
+    environment:
+      FIREBASE_SLEUTEL: /run/secrets/firebase.json
     volumes:
       - /srv/web/sites/muntjes:/srv/sites/muntjes:ro
       - ./data:/srv/sites/muntjes/data
       - ./php.ini:/usr/local/etc/php/conf.d/muntjes.ini:ro
+      - ./firebase.json:/run/secrets/firebase.json:ro
     networks:
       - web
 
