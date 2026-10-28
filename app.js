@@ -40,6 +40,38 @@ const KLEUREN = [
 ];
 const ICOON_KEUZE = ['plate', 'table', 'bed', 'tooth', 'shirt', 'blocks', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star'];
 const DUREN = [0, 5, 10, 15, 20, 30, 45, 60];
+const THEMAS = [['geen', 'Standaard'], ['eenhoorn', 'Eenhoorns'], ['dino', 'Dinosaurussen']];
+
+// Mascottes voor de kind-app, per thema.
+const MASCOTTE = {
+  eenhoorn: (size) => `<svg width="${size}" height="${size}" viewBox="0 0 120 120" aria-hidden="true">
+    <g stroke="#5B4A86" stroke-width="2.5">
+      <circle cx="60" cy="34" r="10" fill="#F9A8D4"/><circle cx="50" cy="46" r="10" fill="#C4B5FD"/>
+      <circle cx="44" cy="60" r="10" fill="#93C5FD"/><circle cx="40" cy="74" r="9" fill="#F9A8D4"/>
+      <circle cx="38" cy="88" r="9" fill="#C4B5FD"/><circle cx="38" cy="101" r="8" fill="#93C5FD"/>
+      <path d="M46 110C42 94 42 78 48 66C52 46 66 33 82 33C94 33 102 41 106 53C110 63 108 73 100 77C94 80 86 79 80 75C76 85 74 97 76 110Z" fill="#fff" stroke-linejoin="round"/>
+      <path d="M70 38L65 19L80 31Z" fill="#fff" stroke-linejoin="round"/>
+      <path d="M82 33L97 6L91 35Z" fill="#FCD34D" stroke="#B45309" stroke-linejoin="round"/>
+      <path d="M86 25L93 23M84 30L92 28M89 18L95 16" stroke="#B45309" stroke-width="2"/>
+      <path d="M83 52q5-5 10 0" fill="none" stroke-linecap="round"/>
+    </g>
+    <circle cx="94" cy="63" r="5" fill="#F9A8D4" opacity=".7"/>
+    <circle cx="103" cy="66" r="2" fill="#5B4A86"/>
+  </svg>`,
+  dino: (size) => `<svg width="${size}" height="${size}" viewBox="0 0 120 120" aria-hidden="true">
+    <g stroke="#2F5A1C" stroke-width="2.5" stroke-linejoin="round">
+      <path d="M48 58l5-11 6 10zM62 56l6-11 5 11zM76 52l7-9 3 11zM86 36l8-6 1 10z" fill="#FB923C"/>
+      <path d="M24 88C12 90 6 84 3 74C11 80 18 80 26 78Z" fill="#84CC16"/>
+      <rect x="32" y="90" width="12" height="20" rx="5" fill="#65A30D"/>
+      <rect x="64" y="90" width="12" height="20" rx="5" fill="#65A30D"/>
+      <path d="M20 90C20 70 38 58 58 58C70 58 78 62 82 52C86 40 88 26 98 22C108 18 117 26 115 36C113 44 105 46 99 46C95 56 93 70 91 80C89 92 80 100 66 100L30 100C24 100 20 97 20 90Z" fill="#84CC16"/>
+      <path d="M40 92C40 80 50 74 62 74C72 74 78 80 78 90" fill="#D9F99D" stroke-width="2"/>
+    </g>
+    <circle cx="104" cy="31" r="3" fill="#1D2733"/>
+    <path d="M100 40q6 3 11-1" fill="none" stroke="#2F5A1C" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="52" cy="68" r="3" fill="#65A30D"/><circle cx="66" cy="66" r="2.5" fill="#65A30D"/>
+  </svg>`
+};
 const UUR = 3600e3;
 const DAG = 24 * UUR;
 const DAGEN = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
@@ -88,8 +120,8 @@ function beginState() {
   return {
     v: 2,
     kids: [
-      { id: 'noor', naam: 'Noor', kleur: '#7A4FD0', zacht: '#F1ECFB' },
-      { id: 'daan', naam: 'Daan', kleur: '#0F7C74', zacht: '#E4F3F1' }
+      { id: 'noor', naam: 'Noor', kleur: '#7A4FD0', zacht: '#F1ECFB', thema: 'eenhoorn' },
+      { id: 'daan', naam: 'Daan', kleur: '#0F7C74', zacht: '#E4F3F1', thema: 'dino' }
     ],
     klusjes: [
       { id: 'k1', naam: 'Tafel dekken', icon: 'plate', waarde: 1, keer: 1, per: 'dag' },
@@ -154,7 +186,8 @@ function metHoeVaak(st) {
   return {
     ...st,
     klusjes: st.klusjes.map((k) => ({ keer: 1, per: 'dag', ...k })),
-    beloningen: st.beloningen.map((b) => ({ keer: 1, per: 'week', ...b }))
+    beloningen: st.beloningen.map((b) => ({ keer: 1, per: 'week', ...b })),
+    kids: st.kids.map((k) => ({ thema: { noor: 'eenhoorn', daan: 'dino' }[k.id] || 'geen', ...k }))
   };
 }
 
@@ -176,6 +209,9 @@ function bewaar() {
 let s = laad();
 let weergave = ['ouder', 'kind'].includes(new URLSearchParams(location.search).get('view')) ? new URLSearchParams(location.search).get('view') : 'beide';
 let toastTimer = null;
+// ?kind=<id> koppelt de tablet aan een kind (handig op de echte tablet).
+const kindUitUrl = new URLSearchParams(location.search).get('kind');
+if (kindUitUrl && s.kids.some((k) => k.id === kindUitUrl)) s = { ...s, tabletKid: kindUitUrl };
 
 function zet(patch) {
   s = { ...s, ...(typeof patch === 'function' ? patch(s) : patch) };
@@ -324,13 +360,13 @@ const acties = {
 
   // Beheer: kinderen, klusjes en beloningen
   bewerk(d) {
-    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, zeker: false } }); }
+    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', zeker: false } }); }
     else if (d.x === 'klus') { const k = klusVan(d.id); zet({ edit: { soort: 'klus', id: k.id, naam: k.naam, icon: k.icon, waarde: k.waarde, keer: k.keer, per: k.per, zeker: false } }); }
     else { const b = belVan(d.id); zet({ edit: { soort: 'bel', id: b.id, naam: b.naam, icon: b.icon, kosten: b.kosten, duur: b.duur || 0, keer: b.keer, per: b.per, zeker: false } }); }
   },
   nieuw(d) {
     const vrij = KLEUREN.find(([c]) => !s.kids.some((k) => k.kleur === c)) || KLEUREN[0];
-    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag' } : { naam: '', icon: 'gift', kosten: 1, duur: 0, keer: 1, per: 'week' };
+    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen' } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag' } : { naam: '', icon: 'gift', kosten: 1, duur: 0, keer: 1, per: 'week' };
     zet({ edit: { soort: d.x, id: null, ...basis, zeker: false } });
   },
   editVeld(d) {
@@ -349,10 +385,10 @@ const acties = {
     const nieuwId = (p) => p + Date.now().toString(36);
     if (e.soort === 'kid') {
       const [kleur, zacht] = KLEUREN.find(([c]) => c === e.kleur) || KLEUREN[0];
-      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht } : k)), edit: null }));
+      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht, thema: e.thema } : k)), edit: null }));
       else {
         const id = nieuwId('kid');
-        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
+        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht, thema: e.thema }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
       }
     } else if (e.soort === 'klus') {
       const item = { naam, icon: e.icon, waarde: e.waarde, keer: e.keer, per: e.per };
@@ -557,7 +593,7 @@ function schermBeheer() {
     <p class="sec-sub" style="margin:0 0 14px">Tik op een regel om hem aan te passen of te verwijderen.</p>
     <h2 class="sec">Kinderen</h2>
     <div class="lijst">
-      ${s.kids.map((k) => rij('kid', k.id, avatar(k), k.naam, 'Aanpassen')).join('')}
+      ${s.kids.map((k) => rij('kid', k.id, avatar(k), k.naam, (THEMAS.find(([id]) => id === (k.thema || 'geen')) || THEMAS[0])[1])).join('')}
       ${toevoegen('kid', 'Kind toevoegen')}
     </div>
     <h2 class="sec">Zelf klusjes melden</h2>
@@ -600,7 +636,11 @@ function sheetBewerk() {
   let velden = '';
   if (e.soort === 'kid') {
     velden = `<div class="lbl">Kleur</div>
-      <div class="kleuren">${KLEUREN.map(([c], i) => `<button type="button" class="kleur${e.kleur === c ? ' on' : ''}" style="background:${c}" aria-label="Kleur ${i + 1}" aria-pressed="${e.kleur === c}" data-a="editVeld" data-x="kleur" data-id="${c}"></button>`).join('')}</div>`;
+      <div class="kleuren">${KLEUREN.map(([c], i) => `<button type="button" class="kleur${e.kleur === c ? ' on' : ''}" style="background:${c}" aria-label="Kleur ${i + 1}" aria-pressed="${e.kleur === c}" data-a="editVeld" data-x="kleur" data-id="${c}"></button>`).join('')}</div>
+      <div class="lbl">Thema in de kind-app</div>
+      <div class="themas">${THEMAS.map(([id, label]) => `<button type="button" class="thema-knop${e.thema === id ? ' on' : ''}" aria-pressed="${e.thema === id}" data-a="editVeld" data-x="thema" data-id="${id}">
+        ${MASCOTTE[id] ? MASCOTTE[id](48) : `<span class="thema-leeg">${coin(32)}</span>`}<span>${label}</span>
+      </button>`).join('')}</div>`;
   } else {
     const isKlus = e.soort === 'klus';
     const veld = isKlus ? 'waarde' : 'kosten';
@@ -727,7 +767,9 @@ const STATUS_MELD = { aangevraagd: 'Gemeld', goed: 'Goedgekeurd!', afgewezen: 'N
 function renderKind() {
   const kind = kidVan(s.tabletKid);
   const st = stats(kind.id);
-  $('#kind').style.background = kind.zacht;
+  const thema = MASCOTTE[kind.thema] ? kind.thema : 'geen';
+  $('#kind').className = 'tablet thema-' + thema;
+  $('#kind').style.background = thema === 'geen' ? kind.zacht : '';
 
   const vakjes = Array.from({ length: s.maxWeek }, (_, i) => `<i class="${i < st.week ? 'vol' : ''}"></i>`).join('');
 
@@ -800,6 +842,7 @@ function renderKind() {
   return `
     <div class="t-head">
       ${avatar(kind, 52)}
+      ${thema !== 'geen' ? `<span class="t-mascotte">${MASCOTTE[thema](64)}</span>` : ''}
       <span class="hoi">Hoi ${kind.naam}!</span>
       <span class="grow"></span>
       <span class="wk-lbl">Deze week verdiend</span>
@@ -809,6 +852,7 @@ function renderKind() {
     <div class="t-grid">
       <div class="t-left">
         <div class="saldo">
+          ${thema !== 'geen' ? `<span class="saldo-deco">${MASCOTTE[thema](130)}</span>` : ''}
           <span class="lbl">Jouw muntjes</span>
           <div class="saldo-row">${coin(72)}<span class="saldo-num">${st.beschikbaar}</span></div>
           ${st.gereserveerd > 0
