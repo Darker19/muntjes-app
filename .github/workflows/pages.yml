@@ -1,8 +1,10 @@
 name: Demo op GitHub Pages
 
+# De demo op GitHub Pages volgt de branch "preview": daar worden nieuwe ideeën eerst getest.
+# De live app (muntjes.darkesttimes.nl) volgt alleen "main" (zie deploy.yml).
 on:
   push:
-    branches: [ main ]
+    branches: [ preview ]
   workflow_dispatch:
 
 jobs:

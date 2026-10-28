@@ -12,8 +12,8 @@ Beloningsapp voor de kinderen: een **ouder-app** (telefoon) en een **kind-app** 
 
 ## Deploy
 
-Push naar `main`:
-- `site/**` → GitHub Actions kopieert `site/` naar de VPS (`/srv/web/sites/muntjes`, met de deploy-sleutel die alleen daar mag schrijven);
-- de demo op GitHub Pages wordt ook bijgewerkt.
+- Push naar `preview` → de demo op GitHub Pages wordt bijgewerkt (nieuwe ideeën eerst hier testen).
+- Push naar `main` → `site/**` gaat naar de live app op de VPS (`/srv/web/sites/muntjes`, met de deploy-sleutel die alleen daar mag schrijven); `android/**` bouwt een nieuwe widget-APK.
+- Klaar met testen: `preview` samenvoegen in `main`.
 
 Lokaal bekijken (demo): `python3 -m http.server -d site` en open http://localhost:8000.
