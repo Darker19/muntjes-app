@@ -18,6 +18,13 @@ const IC = {
   moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
   ice: 'M8 10a4 4 0 1 1 8 0M7 10h10l-5 11z',
   star: 'M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z',
+  broom: 'M19 3l-7 7M9 9l6 6M4 20c0-4 3-8 6-10l4 4c-2 3-6 6-10 6z',
+  trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
+  game: 'M6 9h12a4 4 0 0 1 0 8c-1.5 0-2.5-1-3-2H9c-.5 1-1.5 2-3 2a4 4 0 0 1 0-8zM8 11v3M6.5 12.5h3M15.5 12h.01M17.5 14h.01',
+  gift: 'M4 11h16v10H4zM3 7h18v4H3zM12 7v14M12 7c-2-4-6-4-6-1s6 1 6 1zM12 7c2-4 6-4 6-1s-6 1-6 1z',
+  music: 'M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0a3 3 0 1 1 6 0M20 16a3 3 0 1 1-6 0a3 3 0 1 1 6 0',
+  ball: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
+  chev: 'M9 6l6 6-6 6',
   minus: 'M5 12h14M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0',
   melden: 'M12 8v8M8 12h8M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0',
   inbox: 'M3 13h5l1.5 3h5l1.5-3h5M5 5h14l2 8v6H3v-6z',
@@ -25,29 +32,13 @@ const IC = {
   beheer: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4'
 };
 
-const KIDS = [
-  { id: 'noor', naam: 'Noor', kleur: '#7A4FD0', zacht: '#F1ECFB' },
-  { id: 'daan', naam: 'Daan', kleur: '#0F7C74', zacht: '#E4F3F1' }
+const OPSLAG = 'muntjes-preview-v2';
+const KLEUREN = [
+  ['#7A4FD0', '#F1ECFB'], ['#0F7C74', '#E4F3F1'], ['#2457C5', '#E8EFFB'], ['#C2410C', '#FCEDE5'],
+  ['#B0306A', '#FAE8F0'], ['#4D7C0F', '#EEF5E4'], ['#1D2733', '#ECEFF3']
 ];
-const KLUSJES = [
-  { id: 'k1', naam: 'Tafel dekken', icon: IC.plate, waarde: 1 },
-  { id: 'k2', naam: 'Tafel afruimen', icon: IC.table, waarde: 1 },
-  { id: 'k3', naam: 'Kamer opruimen', icon: IC.bed, waarde: 1 },
-  { id: 'k4', naam: 'Tanden poetsen zonder zeuren', icon: IC.tooth, waarde: 1 },
-  { id: 'k5', naam: 'Aankleden', icon: IC.shirt, waarde: 1 },
-  { id: 'k6', naam: 'Speelgoed opruimen', icon: IC.blocks, waarde: 1 },
-  { id: 'k7', naam: 'Helpen met boodschappen', icon: IC.bag, waarde: 1 },
-  { id: 'k8', naam: 'Huisdier voeren', icon: IC.paw, waarde: 1 }
-];
-const BELONINGEN = [
-  { id: 'b1', naam: '15 min tablet', icon: IC.tablet, kosten: 2, duur: 15 },
-  { id: 'b2', naam: '15 min tv', icon: IC.tv, kosten: 2, duur: 15 },
-  { id: 'b3', naam: 'Extra voorleesverhaal', icon: IC.book, kosten: 1 },
-  { id: 'b4', naam: 'Later naar bed', icon: IC.moon, kosten: 3 },
-  { id: 'b5', naam: 'Toetje kiezen', icon: IC.ice, kosten: 1 }
-];
-const MAX_WEEK = 7;
-const OPSLAG = 'muntjes-preview-v1';
+const ICOON_KEUZE = ['plate', 'table', 'bed', 'tooth', 'shirt', 'blocks', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star'];
+const DUREN = [0, 5, 10, 15, 20, 30, 45, 60];
 const UUR = 3600e3;
 const DAG = 24 * UUR;
 const DAGEN = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
@@ -58,10 +49,10 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const munt = (n) => (n === 1 ? 'muntje' : 'muntjes');
 const pad = (n) => String(n).padStart(2, '0');
 const mmss = (sec) => { sec = Math.max(0, Math.ceil(sec)); return Math.floor(sec / 60) + ':' + pad(sec % 60); };
-const kidVan = (id) => KIDS.find((k) => k.id === id);
-const klusVan = (id) => KLUSJES.find((k) => k.id === id);
-const belVan = (id) => BELONINGEN.find((b) => b.id === id);
-const icon = (d, size = 24, sw = 1.6) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+const kidVan = (id) => s.kids.find((k) => k.id === id);
+const klusVan = (id) => s.klusjes.find((k) => k.id === id);
+const belVan = (id) => s.beloningen.find((b) => b.id === id);
+const icon = (d, size = 24, sw = 1.6) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${IC[d] || d}"/></svg>`;
 const coin = (size = 24) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#F2B705" stroke="#B07F00" stroke-width="1.5"/><circle cx="12" cy="12" r="6" fill="none" stroke="#B07F00" stroke-width="1.5"/></svg>`;
 const avatar = (k, size = 28) => `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;background:${k.kleur}" aria-hidden="true">${k.naam[0]}</span>`;
 
@@ -87,7 +78,30 @@ function beginState() {
   const nu = Date.now();
   const t = (id, kid, type, ref, label, amount, status, bron, geleden, msg) => ({ id, kid, type, ref, label, amount, status, bron, ts: nu - geleden, msg: msg || '' });
   return {
-    v: 1,
+    v: 2,
+    kids: [
+      { id: 'noor', naam: 'Noor', kleur: '#7A4FD0', zacht: '#F1ECFB' },
+      { id: 'daan', naam: 'Daan', kleur: '#0F7C74', zacht: '#E4F3F1' }
+    ],
+    klusjes: [
+      { id: 'k1', naam: 'Tafel dekken', icon: 'plate', waarde: 1 },
+      { id: 'k2', naam: 'Tafel afruimen', icon: 'table', waarde: 1 },
+      { id: 'k3', naam: 'Kamer opruimen', icon: 'bed', waarde: 1 },
+      { id: 'k4', naam: 'Tanden poetsen zonder zeuren', icon: 'tooth', waarde: 1 },
+      { id: 'k5', naam: 'Aankleden', icon: 'shirt', waarde: 1 },
+      { id: 'k6', naam: 'Speelgoed opruimen', icon: 'blocks', waarde: 1 },
+      { id: 'k7', naam: 'Helpen met boodschappen', icon: 'bag', waarde: 1 },
+      { id: 'k8', naam: 'Huisdier voeren', icon: 'paw', waarde: 1 }
+    ],
+    beloningen: [
+      { id: 'b1', naam: '15 min tablet', icon: 'tablet', kosten: 2, duur: 15 },
+      { id: 'b2', naam: '15 min tv', icon: 'tv', kosten: 2, duur: 15 },
+      { id: 'b3', naam: 'Extra voorleesverhaal', icon: 'book', kosten: 1 },
+      { id: 'b4', naam: 'Later naar bed', icon: 'moon', kosten: 3 },
+      { id: 'b5', naam: 'Toetje kiezen', icon: 'ice', kosten: 1 }
+    ],
+    maxWeek: 7,
+    edit: null,
     tx: [
       t(14, 'daan', 'klus', 'k3', 'Kamer opruimen', 1, 'aangevraagd', 'kind', 0.2 * UUR),
       t(1, 'noor', 'klus', 'k1', 'Tafel dekken', 1, 'goed', 'ouder', 0.5 * UUR),
@@ -122,14 +136,14 @@ function laad() {
     const raw = localStorage.getItem(OPSLAG);
     if (raw) {
       const d = JSON.parse(raw);
-      if (d && d.v === 1) return { ...beginState(), ...d, toast: null, sheet: null };
+      if (d && d.v === 2) return { ...beginState(), ...d, toast: null, sheet: null, edit: null };
     }
   } catch (e) { /* geen opslag beschikbaar: begin opnieuw */ }
   return beginState();
 }
 
 function bewaar() {
-  try { localStorage.setItem(OPSLAG, JSON.stringify({ ...s, toast: null, sheet: null })); } catch (e) { /* negeren */ }
+  try { localStorage.setItem(OPSLAG, JSON.stringify({ ...s, toast: null, sheet: null, edit: null })); } catch (e) { /* negeren */ }
 }
 
 let s = laad();
@@ -215,7 +229,7 @@ const acties = {
   klusKies(d) {
     const klus = s.sheet && klusVan(s.sheet.id);
     const kid = kidVan(d.id);
-    if (!klus || stats(kid.id).week + klus.waarde > MAX_WEEK) return;
+    if (!klus || stats(kid.id).week + klus.waarde > s.maxWeek) return;
     voegToe({ kid: kid.id, type: 'klus', ref: klus.id, label: klus.naam, amount: klus.waarde, status: 'goed', bron: 'ouder', msg: s.bericht.trim() });
     zet({ sheet: null, bericht: '' });
     melding('+' + klus.waarde + ' voor ' + kid.naam + ' · ' + klus.naam);
@@ -243,8 +257,8 @@ const acties = {
     if (!t) return;
     const kid = kidVan(t.kid);
     const isKlus = t.type === 'klus';
-    if (ok && isKlus && stats(t.kid).week + t.amount > MAX_WEEK) {
-      melding(kid.naam + ' heeft deze week al ' + MAX_WEEK + ' muntjes verdiend');
+    if (ok && isKlus && stats(t.kid).week + t.amount > s.maxWeek) {
+      melding(kid.naam + ' heeft deze week al ' + s.maxWeek + ' muntjes verdiend');
       return;
     }
     const b = isKlus ? null : belVan(t.ref);
@@ -271,6 +285,72 @@ const acties = {
   },
   snel() { zet({ demoSnel: !s.demoSnel }); },
   meldToggle(d) { zet((st) => ({ kindMelden: { ...st.kindMelden, [d.id]: !st.kindMelden[d.id] } })); },
+  maxWeek(d) { zet({ maxWeek: Math.min(30, Math.max(1, s.maxWeek + (d.x === '+' ? 1 : -1))) }); },
+
+  // Beheer: kinderen, klusjes en beloningen
+  bewerk(d) {
+    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, zeker: false } }); }
+    else if (d.x === 'klus') { const k = klusVan(d.id); zet({ edit: { soort: 'klus', id: k.id, naam: k.naam, icon: k.icon, waarde: k.waarde, zeker: false } }); }
+    else { const b = belVan(d.id); zet({ edit: { soort: 'bel', id: b.id, naam: b.naam, icon: b.icon, kosten: b.kosten, duur: b.duur || 0, zeker: false } }); }
+  },
+  nieuw(d) {
+    const vrij = KLEUREN.find(([c]) => !s.kids.some((k) => k.kleur === c)) || KLEUREN[0];
+    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1 } : { naam: '', icon: 'gift', kosten: 1, duur: 0 };
+    zet({ edit: { soort: d.x, id: null, ...basis, zeker: false } });
+  },
+  editVeld(d) {
+    const e = s.edit;
+    if (!e) return;
+    let v = d.id;
+    if (d.x === 'waarde' || d.x === 'kosten') v = Math.min(10, Math.max(1, e[d.x] + (d.id === '+' ? 1 : -1)));
+    if (d.x === 'duur') v = Number(d.id);
+    zet({ edit: { ...e, [d.x]: v, zeker: false } });
+  },
+  editSluit() { zet({ edit: null }); },
+  editOpslaan() {
+    const e = s.edit;
+    const naam = (e.naam || '').replace(/[<>&"]/g, '').trim().slice(0, 30);
+    if (!naam) return;
+    const nieuwId = (p) => p + Date.now().toString(36);
+    if (e.soort === 'kid') {
+      const [kleur, zacht] = KLEUREN.find(([c]) => c === e.kleur) || KLEUREN[0];
+      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht } : k)), edit: null }));
+      else {
+        const id = nieuwId('kid');
+        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
+      }
+    } else if (e.soort === 'klus') {
+      const item = { naam, icon: e.icon, waarde: e.waarde };
+      if (e.id) zet((st) => ({ klusjes: st.klusjes.map((k) => (k.id === e.id ? { ...k, ...item } : k)), edit: null }));
+      else zet((st) => ({ klusjes: [...st.klusjes, { id: nieuwId('k'), ...item }], edit: null }));
+    } else {
+      const item = { naam, icon: e.icon, kosten: e.kosten, duur: e.duur || 0 };
+      if (e.id) zet((st) => ({ beloningen: st.beloningen.map((b) => (b.id === e.id ? { ...b, ...item } : b)), edit: null }));
+      else zet((st) => ({ beloningen: [...st.beloningen, { id: nieuwId('b'), ...item }], edit: null }));
+    }
+    melding('Opgeslagen: ' + naam);
+  },
+  editVerwijder() {
+    const e = s.edit;
+    if (!e || !e.id) return;
+    if (!e.zeker) { zet({ edit: { ...e, zeker: true } }); return; }
+    if (e.soort === 'kid') {
+      if (s.kids.length <= 1) return;
+      zet((st) => {
+        const kids = st.kids.filter((k) => k.id !== e.id);
+        return {
+          kids,
+          tx: st.tx.filter((t) => t.kid !== e.id),
+          timers: st.timers.filter((t) => t.kid !== e.id),
+          tabletKid: st.tabletKid === e.id ? kids[0].id : st.tabletKid,
+          ovKid: st.ovKid === e.id ? kids[0].id : st.ovKid,
+          edit: null
+        };
+      });
+    } else if (e.soort === 'klus') zet((st) => ({ klusjes: st.klusjes.filter((k) => k.id !== e.id), edit: null }));
+    else zet((st) => ({ beloningen: st.beloningen.filter((b) => b.id !== e.id), edit: null }));
+    melding('Verwijderd: ' + e.naam);
+  },
 
   beloning(d) {
     const b = belVan(d.id);
@@ -293,7 +373,7 @@ const acties = {
       zet((st) => ({ tx: t.status === 'aangevraagd' ? st.tx.filter((x) => x.id !== t.id) : st.tx.map((x) => (x.id === t.id ? { ...x, gezien: true } : x)) }));
       return;
     }
-    if (stats(kid).week + openMeldingen(kid) + k.waarde > MAX_WEEK) return;
+    if (stats(kid).week + openMeldingen(kid) + k.waarde > s.maxWeek) return;
     voegToe({ kid, type: 'klus', ref: k.id, label: k.naam, amount: k.waarde, status: 'aangevraagd', bron: 'kind' });
   }
 };
@@ -332,19 +412,19 @@ function renderOuder() {
         </button>`).join('')}
     </nav>
     ${s.toast ? `<div class="toast" role="status">${coin(22)}<span>${esc(s.toast)}</span></div>` : ''}
-    ${sheetKlus()}${sheetOverig()}`;
+    ${sheetKlus()}${sheetOverig()}${sheetBewerk()}`;
 }
 
 function schermMelden() {
-  const kaarten = KIDS.map((k) => {
+  const kaarten = s.kids.map((k) => {
     const st = stats(k.id);
     return `<div class="kcard">
       <div class="kname">${avatar(k)}<b>${k.naam}</b></div>
       <div class="kbal"><span class="num">${st.beschikbaar}</span><span>muntjes</span></div>
-      <div class="muted">Deze week ${st.week}/${MAX_WEEK} verdiend</div>
+      <div class="muted">Deze week ${st.week}/${s.maxWeek} verdiend</div>
     </div>`;
   }).join('');
-  const klusjes = KLUSJES.map((k) => `
+  const klusjes = s.klusjes.map((k) => `
     <button type="button" class="klus" data-a="klusOpen" data-id="${k.id}">
       <span class="icobox">${icon(k.icon, 26)}</span>
       <span class="kl-naam">${k.naam}</span>
@@ -433,15 +513,20 @@ function schermTimers() {
 }
 
 function schermBeheer() {
+  const rij = (soort, id, links, naam, rechts) => `<button type="button" class="lrij" data-a="bewerk" data-x="${soort}" data-id="${id}">
+    ${links}<span class="grow">${naam}</span><span class="r">${rechts}</span>${icon(IC.chev, 18, 2)}
+  </button>`;
+  const toevoegen = (soort, tekst) => `<button type="button" class="lrij toevoegen" data-a="nieuw" data-x="${soort}">+ ${tekst}</button>`;
   return `
+    <p class="sec-sub" style="margin:0 0 14px">Tik op een regel om hem aan te passen of te verwijderen.</p>
     <h2 class="sec">Kinderen</h2>
     <div class="lijst">
-      ${KIDS.map((k) => `<div class="lrij">${avatar(k)}<span class="grow">${k.naam}</span><span class="r">Aanpassen</span></div>`).join('')}
-      <div class="lrij" style="color:var(--accent);font-weight:800">+ Kind toevoegen</div>
+      ${s.kids.map((k) => rij('kid', k.id, avatar(k), k.naam, 'Aanpassen')).join('')}
+      ${toevoegen('kid', 'Kind toevoegen')}
     </div>
     <h2 class="sec">Zelf klusjes melden</h2>
     <div class="lijst">
-      ${KIDS.map((k) => {
+      ${s.kids.map((k) => {
         const aan = !!s.kindMelden[k.id];
         return `<button type="button" class="lrij" data-a="meldToggle" data-id="${k.id}" aria-pressed="${aan}">
           ${avatar(k)}
@@ -452,29 +537,80 @@ function schermBeheer() {
     </div>
     <h2 class="sec">Klusjes</h2>
     <div class="lijst">
-      ${KLUSJES.map((k) => `<div class="lrij">${icon(k.icon, 22)}<span class="grow">${k.naam}</span><span class="r">+${k.waarde}</span></div>`).join('')}
+      ${s.klusjes.map((k) => rij('klus', k.id, icon(k.icon, 22), k.naam, '+' + k.waarde)).join('')}
+      ${toevoegen('klus', 'Klusje toevoegen')}
     </div>
     <h2 class="sec">Beloningen</h2>
     <div class="lijst">
-      ${BELONINGEN.map((b) => `<div class="lrij">${icon(b.icon, 22)}<span class="grow">${b.naam}</span><span class="r">${b.kosten} ${munt(b.kosten)}${b.duur ? ' · timer ' + b.duur + ' min' : ''}</span></div>`).join('')}
+      ${s.beloningen.map((b) => rij('bel', b.id, icon(b.icon, 22), b.naam, b.kosten + ' ' + munt(b.kosten) + (b.duur ? ' · ' + b.duur + ' min' : ''))).join('')}
+      ${toevoegen('bel', 'Beloning toevoegen')}
     </div>
     <h2 class="sec">Instellingen</h2>
     <div class="lijst">
-      <div class="lrij"><span class="grow">Max. verdienen per week</span><span class="r">${MAX_WEEK} muntjes</span></div>
+      <div class="lrij">
+        <span class="grow">Max. verdienen per week</span>
+        <button type="button" class="stepbtn sm" aria-label="Minder" data-a="maxWeek" data-x="-">−</button>
+        <span class="stepnum sm" aria-live="polite">${s.maxWeek}</span>
+        <button type="button" class="stepbtn sm" aria-label="Meer" data-a="maxWeek" data-x="+">+</button>
+      </div>
       <div class="lrij"><span class="grow">Elke beloning</span><span class="r">1× per week</span></div>
-      <div class="lrij"><span class="grow">Pincode</span><span class="r">Wijzigen</span></div>
+      <div class="lrij"><span class="grow">Pincode</span><span class="r">Komt in de echte app</span></div>
     </div>`;
+}
+
+function sheetBewerk() {
+  const e = s.edit;
+  if (!e) return '';
+  const titels = { kid: ['Kind toevoegen', 'Kind aanpassen'], klus: ['Klusje toevoegen', 'Klusje aanpassen'], bel: ['Beloning toevoegen', 'Beloning aanpassen'] };
+  let velden = '';
+  if (e.soort === 'kid') {
+    velden = `<div class="lbl">Kleur</div>
+      <div class="kleuren">${KLEUREN.map(([c], i) => `<button type="button" class="kleur${e.kleur === c ? ' on' : ''}" style="background:${c}" aria-label="Kleur ${i + 1}" aria-pressed="${e.kleur === c}" data-a="editVeld" data-x="kleur" data-id="${c}"></button>`).join('')}</div>`;
+  } else {
+    const isKlus = e.soort === 'klus';
+    const veld = isKlus ? 'waarde' : 'kosten';
+    velden = `<div class="lbl">Plaatje</div>
+      <div class="iconen">${ICOON_KEUZE.map((k) => `<button type="button" class="ikoon${e.icon === k ? ' on' : ''}" aria-label="Plaatje ${k}" aria-pressed="${e.icon === k}" data-a="editVeld" data-x="icon" data-id="${k}">${icon(k, 24)}</button>`).join('')}</div>
+      <div class="stepper">
+        <span class="lbl grow">${isKlus ? 'Levert op' : 'Kost'}</span>
+        <button type="button" class="stepbtn" aria-label="Minder" data-a="editVeld" data-x="${veld}" data-id="-">−</button>
+        <span class="stepnum" aria-live="polite">${e[veld]}</span>
+        <button type="button" class="stepbtn" aria-label="Meer" data-a="editVeld" data-x="${veld}" data-id="+">+</button>
+        <span class="muted">${munt(e[veld])}</span>
+      </div>
+      ${isKlus ? '' : `<div class="lbl">Timer na goedkeuring</div>
+        <div class="pills wrap">${DUREN.map((m) => `<button type="button" class="pill${(e.duur || 0) === m ? ' on' : ''}" aria-pressed="${(e.duur || 0) === m}" data-a="editVeld" data-x="duur" data-id="${m}">${m ? m + ' min' : 'Geen'}</button>`).join('')}</div>`}`;
+  }
+  const kanWeg = e.id && !(e.soort === 'kid' && s.kids.length <= 1);
+  const waarschuwing = e.soort === 'kid'
+    ? 'Hiermee verdwijnen ook alle muntjes en de geschiedenis van ' + esc(e.naam) + '. Tik nog een keer op Verwijderen.'
+    : 'Weet je het zeker? Tik nog een keer op Verwijderen. De geschiedenis blijft bewaard.';
+  return `<div class="sheet-wrap">
+    <button type="button" class="sheet-bg" data-a="editSluit" aria-label="Sluiten"></button>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-ed">
+      <div class="sh-title" id="sh-ed">${titels[e.soort][e.id ? 1 : 0]}</div>
+      <label class="lbl" for="ed-naam">Naam</label>
+      <input class="inp" id="ed-naam" data-input="edit.naam" value="${esc(e.naam)}" maxlength="30" autocomplete="off" placeholder="${e.soort === 'kid' ? 'Naam van het kind' : e.soort === 'klus' ? 'Bijv. Planten water geven' : 'Bijv. Samen een spelletje'}">
+      ${velden}
+      ${e.zeker ? `<div class="warn">${waarschuwing}</div>` : ''}
+      <div class="flex">
+        ${kanWeg ? '<button type="button" class="btn btn-stop" data-a="editVerwijder">Verwijderen</button>' : ''}
+        <button type="button" class="btn btn-soft" data-a="editSluit">Annuleren</button>
+        <button type="button" class="btn wide btn-primary" data-a="editOpslaan" ${(e.naam || '').trim() ? '' : 'disabled'}>Opslaan</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 function sheetKlus() {
   if (!s.sheet || s.sheet.type !== 'klus') return '';
   const k = klusVan(s.sheet.id);
-  const kids = KIDS.map((kid) => {
+  const kids = s.kids.map((kid) => {
     const st = stats(kid.id);
-    const vol = st.week + k.waarde > MAX_WEEK;
+    const vol = st.week + k.waarde > s.maxWeek;
     return `<button type="button" class="kidpick" style="border-color:${vol ? 'var(--line)' : kid.kleur};background:${vol ? 'var(--soft)' : kid.zacht}" data-a="klusKies" data-id="${kid.id}" ${vol ? 'disabled' : ''}>
       ${avatar(kid, 36)}
-      <span class="col"><b>${kid.naam}</b><small>${vol ? 'Weeklimiet bereikt' : st.week + '/' + MAX_WEEK + ' deze week'}</small></span>
+      <span class="col"><b>${kid.naam}</b><small>${vol ? 'Weeklimiet bereikt' : st.week + '/' + s.maxWeek + ' deze week'}</small></span>
     </button>`;
   }).join('');
   return `<div class="sheet-wrap">
@@ -506,7 +642,7 @@ function sheetOverig() {
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-ov">
       <div class="sh-title" id="sh-ov">Overig</div>
       <div class="pills">
-        ${KIDS.map((k) => {
+        ${s.kids.map((k) => {
           const aan = k.id === s.ovKid;
           return `<button type="button" class="pill" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="ovKid" data-id="${k.id}">${k.naam}</button>`;
         }).join('')}
@@ -547,7 +683,7 @@ function renderKind() {
   const st = stats(kind.id);
   $('#kind').style.background = kind.zacht;
 
-  const vakjes = Array.from({ length: MAX_WEEK }, (_, i) => `<i class="${i < st.week ? 'vol' : ''}"></i>`).join('');
+  const vakjes = Array.from({ length: s.maxWeek }, (_, i) => `<i class="${i < st.week ? 'vol' : ''}"></i>`).join('');
 
   const log = nieuwsteEerst(s.tx.filter((t) => t.kid === kind.id)).map((t) => {
     const act = t.type === 'klus' ? klusVan(t.ref) : t.type === 'beloning' ? belVan(t.ref) : null;
@@ -568,7 +704,7 @@ function renderKind() {
     </div>`;
   }).join('');
 
-  const beloningen = BELONINGEN.map((b) => {
+  const beloningen = s.beloningen.map((b) => {
     const status = belStatus(kind.id, b);
     const info = STATUS_BEL[status];
     const tekort = (status === 'vrij' || status === 'afgewezen') && st.beschikbaar < b.kosten;
@@ -586,9 +722,9 @@ function renderKind() {
 
   let melden = '';
   if (s.kindMelden[kind.id]) {
-    const ruimte = MAX_WEEK - st.week - openMeldingen(kind.id);
+    const ruimte = s.maxWeek - st.week - openMeldingen(kind.id);
     melden = `<h2 class="big">Klusje gedaan? Meld het!</h2>
-      <div class="mgrid">${KLUSJES.map((k) => {
+      <div class="mgrid">${s.klusjes.map((k) => {
         const t = laatsteMelding(kind.id, k);
         const status = t ? t.status : 'vrij';
         const vol = status === 'vrij' && k.waarde > ruimte;
@@ -609,8 +745,8 @@ function renderKind() {
       <span class="hoi">Hoi ${kind.naam}!</span>
       <span class="grow"></span>
       <span class="wk-lbl">Deze week verdiend</span>
-      <span class="wk" role="img" aria-label="${st.week} van ${MAX_WEEK}">${vakjes}</span>
-      <span class="wk-num">${st.week}/${MAX_WEEK}</span>
+      <span class="wk" role="img" aria-label="${st.week} van ${s.maxWeek}">${vakjes}</span>
+      <span class="wk-num">${st.week}/${s.maxWeek}</span>
     </div>
     <div class="t-grid">
       <div class="t-left">
@@ -636,7 +772,7 @@ function renderKind() {
         </div>
         <div class="rgrid">${beloningen}</div>
         ${melden}
-        <p class="info">Elke beloning kun je 1× per week gebruiken. Je verdient maximaal ${MAX_WEEK} muntjes per week.</p>
+        <p class="info">Elke beloning kun je 1× per week gebruiken. Je verdient maximaal ${s.maxWeek} muntjes per week.</p>
       </div>
     </div>`;
 }
@@ -647,7 +783,7 @@ function renderBar() {
   const tabletKeuze = weergave === 'ouder' ? '' : `
     <div class="bar-group" role="group" aria-label="Tablet van">
       <span class="bar-lbl">Tablet van</span>
-      ${KIDS.map((k) => {
+      ${s.kids.map((k) => {
         const aan = s.tabletKid === k.id;
         return `<button type="button" class="seg-btn" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="tablet" data-id="${k.id}">${k.naam}</button>`;
       }).join('')}
@@ -705,13 +841,20 @@ document.addEventListener('click', (e) => {
 document.addEventListener('input', (e) => {
   const veld = e.target.dataset && e.target.dataset.input;
   if (!veld) return;
+  if (veld === 'edit.naam') {
+    s = { ...s, edit: { ...s.edit, naam: e.target.value, zeker: false } };
+    render();
+    return;
+  }
   s = { ...s, [veld]: e.target.value, ovZeker: veld === 'ovReden' ? false : s.ovZeker };
   bewaar();
   if (veld === 'ovReden') render();
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && s.sheet) acties.sluit();
+  if (e.key !== 'Escape') return;
+  if (s.edit) acties.editSluit();
+  else if (s.sheet) acties.sluit();
 });
 
 // Andere tab met dezelfde preview open? Dan meelopen.

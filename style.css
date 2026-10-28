@@ -155,6 +155,19 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 .stepnum { font-family: Fredoka, sans-serif; font-size: 26px; font-weight: 600; min-width: 24px; text-align: center; }
 .warn { background: var(--red-bg); border-radius: 12px; padding: 10px 12px; font-size: 13px; font-weight: 700; color: var(--red-tx); }
 
+.lrij.toevoegen { color: var(--accent); font-weight: 800; }
+.lrij svg:last-child { color: var(--muted); flex-shrink: 0; }
+.stepbtn.sm { width: 36px; height: 36px; font-size: 18px; }
+.stepnum.sm { font-size: 20px; min-width: 28px; }
+.pills.wrap { flex-wrap: wrap; }
+.pill.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.kleuren { display: flex; gap: 10px; flex-wrap: wrap; }
+.kleur { width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 2px var(--line); }
+.kleur.on { box-shadow: 0 0 0 3px var(--ink); }
+.iconen { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.ikoon { height: 44px; border-radius: 12px; border: 2px solid var(--line); background: #fff; display: flex; align-items: center; justify-content: center; }
+.ikoon.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+
 /* Kind-app */
 .t-head { padding: 20px 28px; display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; }
 .hoi { font-family: Fredoka, sans-serif; font-size: 30px; font-weight: 600; }
