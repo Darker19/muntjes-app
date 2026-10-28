@@ -80,7 +80,7 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 .kcard { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
 .kname { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .avatar { border-radius: 50%; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
-.kbal { display: flex; align-items: baseline; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.kbal { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
 .kbal .num { font-family: Fredoka, sans-serif; font-size: 30px; font-weight: 600; color: var(--ink); }
 
 .klus { min-height: 112px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; }
@@ -178,6 +178,7 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 .wk { display: flex; gap: 6px; }
 .wk i { width: 22px; height: 22px; border-radius: 50%; border: 2px dashed var(--grey-bd); }
 .wk i.vol { background: #F2B705; border: 2px solid #B07F00; }
+.wk-vol { display: flex; width: 24px; height: 24px; }
 .wk-num { font-family: Fredoka, sans-serif; font-size: 20px; font-weight: 600; }
 .t-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 24px; padding: 0 28px 28px; }
 .t-left { display: flex; flex-direction: column; gap: 16px; min-height: 0; }

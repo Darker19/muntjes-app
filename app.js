@@ -87,6 +87,18 @@ const klusVan = (id) => s.klusjes.find((k) => k.id === id);
 const belVan = (id) => s.beloningen.find((b) => b.id === id);
 const icon = (d, size = 24, sw = 1.6) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${IC[d] || d}"/></svg>`;
 const coin = (size = 24) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#F2B705" stroke="#B07F00" stroke-width="1.5"/><circle cx="12" cy="12" r="6" fill="none" stroke="#B07F00" stroke-width="1.5"/></svg>`;
+const hart = (size = 24) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 4.5 6.9 4.5c2.1 0 3.6 1.1 5.1 3 1.5-1.9 3-3 5.1-3 3.7 0 5.9 3.8 4.4 7.3C19.5 16.4 12 21 12 21z" fill="#F472B6" stroke="#BE185D" stroke-width="1.5" stroke-linejoin="round"/><path d="M6.5 8.2c.6-1.2 1.7-1.7 2.8-1.5" fill="none" stroke="#FCE7F3" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+const vlees = (size = 24) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 13.5L5.2 18.8" stroke="#7C2D12" stroke-width="4.6" stroke-linecap="round"/><path d="M10.5 13.5L5.2 18.8" stroke="#FFF7E6" stroke-width="2.4" stroke-linecap="round"/><circle cx="3.9" cy="17.6" r="1.9" fill="#FFF7E6" stroke="#7C2D12" stroke-width="1.2"/><circle cx="6.4" cy="20.1" r="1.9" fill="#FFF7E6" stroke="#7C2D12" stroke-width="1.2"/><path d="M9.5 13.5C7 11 7.6 6.6 10.6 4.6 13.6 2.6 18.5 3.2 20.3 6.4 22 9.6 20.2 13.8 16.6 15.2 14 16.2 11.3 15.3 9.5 13.5z" fill="#C2410C" stroke="#7C2D12" stroke-width="1.4" stroke-linejoin="round"/><path d="M13 6.6c1.5-1 3.5-1 4.7.2" fill="none" stroke="#FDBA74" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+// Wat een kind verzamelt hangt af van zijn thema.
+const VALUTA = {
+  geen: { een: 'muntje', veel: 'muntjes', titel: 'Jouw muntjes', vandaan: 'Waar komen je muntjes vandaan?', icoon: coin },
+  eenhoorn: { een: 'hartje', veel: 'hartjes', titel: 'Jouw hartjes', vandaan: 'Waar komen je hartjes vandaan?', icoon: hart },
+  dino: { een: 'stukje vlees', veel: 'stukjes vlees', titel: 'Jouw vlees', vandaan: 'Waar komt je vlees vandaan?', icoon: vlees }
+};
+const valuta = (kid) => {
+  const v = VALUTA[kid && kid.thema] || VALUTA.geen;
+  return { ...v, woord: (n) => (n === 1 ? v.een : v.veel) };
+};
 const avatar = (k, size = 28) => `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;background:${k.kleur}" aria-hidden="true">${k.naam[0]}</span>`;
 
 function weekStart() {
@@ -491,7 +503,7 @@ function schermMelden() {
     const st = stats(k.id);
     return `<div class="kcard">
       <div class="kname">${avatar(k)}<b>${k.naam}</b></div>
-      <div class="kbal"><span class="num">${st.beschikbaar}</span><span>muntjes</span></div>
+      <div class="kbal">${valuta(k).icoon(22)}<span class="num">${st.beschikbaar}</span><span>${valuta(k).woord(st.beschikbaar)}</span></div>
       <div class="muted">Deze week ${st.week}/${s.maxWeek} verdiend</div>
     </div>`;
   }).join('');
@@ -527,7 +539,7 @@ function schermAanvragen() {
       <div class="req-top">
         <span class="icobox wit">${icon(act ? act.icon : IC.star, 26)}</span>
         <div class="grow"><b>${esc(t.label)}</b><div class="muted">${esc(sub)}</div></div>
-        <span class="req-amt ${isKlus ? 'pos' : 'wachtc'}">${isKlus ? '+' : '−'}${n} ${munt(n)}</span>
+        <span class="req-amt ${isKlus ? 'pos' : 'wachtc'}">${isKlus ? '+' : '−'}${n} ${valuta(kid).woord(n)}</span>
       </div>
       <div class="row2">
         <button type="button" class="btn btn-outline" data-a="beslis" data-id="${t.id}" data-x="nee">Afwijzen</button>
@@ -720,7 +732,7 @@ function sheetOverig() {
   const cta = o.isMin ? (s.ovZeker ? 'Ja, afhalen' : '−' + o.aantal + ' van ' + o.kind.naam) : '+' + o.aantal + ' voor ' + o.kind.naam;
   const toonWaarschuwing = o.isMin && (s.ovZeker || o.max === 0);
   const waarschuwing = o.max === 0
-    ? o.kind.naam + ' heeft geen vrije muntjes. Het saldo kan niet onder 0.'
+    ? o.kind.naam + ' heeft geen vrije ' + valuta(o.kind).veel + '. Het saldo kan niet onder 0.'
     : 'Weet je het zeker? Dit haalt ' + o.aantal + ' ' + munt(o.aantal) + ' af bij ' + o.kind.naam + '.';
   return `<div class="sheet-wrap">
     <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
@@ -767,11 +779,12 @@ const STATUS_MELD = { aangevraagd: 'Gemeld', goed: 'Goedgekeurd!', afgewezen: 'N
 function renderKind() {
   const kind = kidVan(s.tabletKid);
   const st = stats(kind.id);
+  const v = valuta(kind);
   const thema = MASCOTTE[kind.thema] ? kind.thema : 'geen';
   $('#kind').className = 'tablet thema-' + thema;
   $('#kind').style.background = thema === 'geen' ? kind.zacht : '';
 
-  const vakjes = Array.from({ length: s.maxWeek }, (_, i) => `<i class="${i < st.week ? 'vol' : ''}"></i>`).join('');
+  const vakjes = Array.from({ length: s.maxWeek }, (_, i) => (i < st.week ? `<span class="wk-vol">${v.icoon(24)}</span>` : '<i></i>')).join('');
 
   const log = nieuwsteEerst(s.tx.filter((t) => t.kid === kind.id)).map((t) => {
     const act = t.type === 'klus' ? klusVan(t.ref) : t.type === 'beloning' ? belVan(t.ref) : null;
@@ -811,8 +824,8 @@ function renderKind() {
         ${b.duur ? `<span class="duur">${icon(IC.klok, 18, 2)}${b.duur} minuten</span>` : ''}
         <span class="duur">${icon(IC.herhaal, 18, 2)}${keerTekst}</span>
       </span>
-      <span class="coins" role="img" aria-label="${b.kosten} ${munt(b.kosten)}">${coin(28).repeat(b.kosten)}</span>
-      <span class="voet">${tekort ? 'Nog ' + nodig + ' ' + munt(nodig) + ' nodig' : voet}</span>
+      <span class="coins" role="img" aria-label="${b.kosten} ${v.woord(b.kosten)}">${v.icoon(28).repeat(b.kosten)}</span>
+      <span class="voet">${tekort ? 'Nog ' + nodig + ' ' + v.woord(nodig) + ' nodig' : voet}</span>
     </button>`;
   }).join('');
 
@@ -829,7 +842,7 @@ function renderKind() {
           ? `<span class="chip c-${status}">${STATUS_MELD[status]}</span>`
           : klaar
             ? `<span class="chip c-vol">${k.per === 'dag' ? 'Vandaag gedaan' : 'Deze week gedaan'}</span>`
-            : `<span class="chip ${vol ? 'c-vol' : 'c-vrij'}">${vol ? 'Weeklimiet bereikt' : '+' + k.waarde + ' ' + munt(k.waarde)}</span>`;
+            : `<span class="chip ${vol ? 'c-vol' : 'c-vrij'}">${vol ? 'Weeklimiet bereikt' : '+' + k.waarde + ' ' + v.woord(k.waarde)}</span>`;
         return `<button type="button" class="mcard s-${status}${vol || klaar ? ' dim' : ''}" data-a="meld" data-id="${k.id}">
           <span class="ricon">${icon(k.icon, 30, 1.5)}</span>
           <span class="mnaam">${k.naam}</span>
@@ -853,14 +866,14 @@ function renderKind() {
       <div class="t-left">
         <div class="saldo">
           ${thema !== 'geen' ? `<span class="saldo-deco">${MASCOTTE[thema](130)}</span>` : ''}
-          <span class="lbl">Jouw muntjes</span>
-          <div class="saldo-row">${coin(72)}<span class="saldo-num">${st.beschikbaar}</span></div>
+          <span class="lbl">${v.titel}</span>
+          <div class="saldo-row">${v.icoon(72)}<span class="saldo-num">${st.beschikbaar}</span></div>
           ${st.gereserveerd > 0
-            ? `<span class="res">${st.saldo} ${munt(st.saldo)}, waarvan ${st.gereserveerd} gereserveerd</span>`
+            ? `<span class="res">${st.saldo} ${v.woord(st.saldo)}, waarvan ${st.gereserveerd} gereserveerd</span>`
             : '<span class="vrij">Allemaal vrij te besteden</span>'}
         </div>
         <div class="log">
-          <h2>Waar komen je muntjes vandaan?</h2>
+          <h2>${v.vandaan}</h2>
           <div class="log-list" data-scroll="log">${log}</div>
         </div>
       </div>
@@ -874,7 +887,7 @@ function renderKind() {
         </div>
         <div class="rgrid">${beloningen}</div>
         ${melden}
-        <p class="info">Op elke kaart zie je hoe vaak je hem mag gebruiken. Je verdient maximaal ${s.maxWeek} muntjes per week.</p>
+        <p class="info">Op elke kaart zie je hoe vaak je hem mag gebruiken. Je verdient maximaal ${s.maxWeek} ${v.veel} per week.</p>
       </div>
     </div>`;
 }
