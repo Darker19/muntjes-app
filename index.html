@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muntjes-app · preview</title>
+<meta name="description" content="Klikbare preview van de Muntjes-app: ouder-app en kind-app met gedeelde gegevens.">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%23F2B705' stroke='%23B07F00' stroke-width='1.5'/%3E%3Ccircle cx='12' cy='12' r='6' fill='none' stroke='%23B07F00' stroke-width='1.5'/%3E%3C/svg%3E">
+</head>
+<body>
+<header class="bar" id="bar"></header>
+<main class="stage">
+  <section class="device-col" id="col-ouder" aria-label="Ouder-app">
+    <div class="device-label">Ouder-app <span>telefoon</span></div>
+    <div class="phone" id="ouder"></div>
+  </section>
+  <section class="device-col" id="col-kind" aria-label="Kind-app">
+    <div class="device-label">Kind-app <span>tablet</span></div>
+    <div class="tablet" id="kind"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
