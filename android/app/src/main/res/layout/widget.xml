@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Achtergrond in de lichte kleur van het kind (via setColorFilter) -->
+    <ImageView
+        android:id="@+id/achtergrond"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_achtergrond"
+        android:importantForAccessibility="no" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <ImageView
+            android:id="@+id/mascotte"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/munt"
+            android:importantForAccessibility="no" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/naam"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:text="@string/app_naam"
+                android:textColor="#1D2733"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/eenheid"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/munt"
+                    android:importantForAccessibility="no" />
+
+                <TextView
+                    android:id="@+id/saldo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:text="–"
+                    android:textColor="#1D2733"
+                    android:textSize="34sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/woord"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:maxLines="1"
+                    android:textColor="#3E4855"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/regel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#3E4855"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

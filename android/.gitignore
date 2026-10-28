@@ -1,0 +1,7 @@
+.gradle/
+build/
+app/build/
+local.properties
+# Komen in GitHub Actions uit de geheimen; nooit in de repo
+app/google-services.json
+app/release.jks
