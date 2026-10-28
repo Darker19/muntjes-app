@@ -6,7 +6,9 @@
  * JSON-document in SQLite, met een versienummer. Wie opslaat met een oude versie krijgt 409
  * en de nieuwste versie terug; de app voert zijn wijziging dan opnieuw uit.
  *
- * Ouder:  sessie na inloggen met de pincode.
+ * Gebruikers: elk met een eigen pincode (die is uniek, dus inloggen gaat met alleen de pincode).
+ *   - ouder:   mag alles;
+ *   - familie: klusjes melden, muntjes geven (met berichtje), aanvragen goedkeuren/afwijzen, timers.
  * Tablet: apparaat-sleutel (header X-Apparaat), eenmalig gekoppeld door een ouder.
  *         Een tablet mag alleen aanvragen/meldingen voor zijn eigen kind toevoegen of intrekken.
  */
@@ -71,6 +73,13 @@ try {
         laatst INTEGER NOT NULL DEFAULT 0
     )');
     $db->exec('CREATE TABLE IF NOT EXISTS fouten (ip TEXT PRIMARY KEY, aantal INTEGER NOT NULL, tot INTEGER NOT NULL)');
+    $db->exec('CREATE TABLE IF NOT EXISTS gebruikers (
+        id INTEGER PRIMARY KEY,
+        naam TEXT NOT NULL,
+        rol TEXT NOT NULL CHECK (rol IN (\'ouder\', \'familie\')),
+        pin_hash TEXT NOT NULL,
+        aangemaakt INTEGER NOT NULL
+    )');
 } catch (Throwable $e) {
     fail('De database werkt niet op deze server. Controleer of PHP de map data/ mag beschrijven en of SQLite aan staat.', 500);
 }
@@ -88,10 +97,14 @@ function zet_instelling(string $sleutel, string $waarde): void {
                   ON CONFLICT(sleutel) DO UPDATE SET waarde = excluded.waarde')->execute([$sleutel, $waarde]);
 }
 
-// Eerste keer: de startpincode uit .env (START_PIN) wordt de pincode. Daarna wijzig je hem in de app.
-if (instelling('pin_hash') === null) {
+// Eerste keer: gebruiker "Papa" (ouder) met de oude gedeelde pincode, of anders de startpincode uit .env.
+if ((int)$db->query('SELECT COUNT(*) FROM gebruikers')->fetchColumn() === 0) {
+    $hash = instelling('pin_hash');
     $start = (string)getenv('START_PIN');
-    if (preg_match('/^\d{4,8}$/', $start)) zet_instelling('pin_hash', password_hash($start, PASSWORD_DEFAULT));
+    if ($hash === null && preg_match('/^\d{4,8}$/', $start)) $hash = password_hash($start, PASSWORD_DEFAULT);
+    if ($hash !== null) {
+        $db->prepare('INSERT INTO gebruikers (naam, rol, pin_hash, aangemaakt) VALUES (?, ?, ?, ?)')->execute(['Papa', 'ouder', $hash, time()]);
+    }
 }
 
 /* ---- invoer ---- */
@@ -113,7 +126,12 @@ function need_post(): void {
 /* ---- wie is dit? ---- */
 function wie(): ?array {
     global $db;
-    if (!empty($_SESSION['ouder'])) return ['rol' => 'ouder'];
+    if (!empty($_SESSION['gebruiker'])) {
+        $st = $db->prepare('SELECT id, naam, rol FROM gebruikers WHERE id = ?');
+        $st->execute([(int)$_SESSION['gebruiker']]);
+        $g = $st->fetch();
+        if ($g) return ['rol' => $g['rol'], 'naam' => $g['naam'], 'id' => (int)$g['id']];
+    }
     $token = $_SERVER['HTTP_X_APPARAAT'] ?? '';
     if (preg_match('/^[a-f0-9]{64}$/', $token)) {
         $st = $db->prepare('SELECT id, kid, laatst FROM apparaten WHERE token_hash = ?');
@@ -128,32 +146,65 @@ function wie(): ?array {
     }
     return null;
 }
-function need_ouder(): void {
+function need_ouder(): array {
     $w = wie();
-    if (!$w || $w['rol'] !== 'ouder') fail('Log eerst in als ouder.', 401);
+    if (!$w) fail('Log eerst in.', 401);
+    if ($w['rol'] !== 'ouder') fail('Dit mag alleen papa of mama.', 403);
+    return $w;
+}
+function need_volwassene(): array {
+    $w = wie();
+    if (!$w || !in_array($w['rol'], ['ouder', 'familie'], true)) fail('Log eerst in.', 401);
+    return $w;
 }
 
 /* ---- pincode met slot na te veel fouten (per IP-adres) ---- */
-function controleer_pin(string $pin): void {
+function slot_controleren(): void {
+    global $db;
+    $st = $db->prepare('SELECT tot FROM fouten WHERE ip = ?');
+    $st->execute([$_SERVER['REMOTE_ADDR'] ?? '?']);
+    $tot = (int)$st->fetchColumn();
+    if ($tot > time()) {
+        fail('Te vaak een verkeerde pincode. Probeer het over ' . (int)ceil(($tot - time()) / 60) . ' minuten opnieuw.', 429);
+    }
+}
+function slot_fout(): void {
     global $db;
     $ip = $_SERVER['REMOTE_ADDR'] ?? '?';
-    $nu = time();
     $st = $db->prepare('SELECT aantal, tot FROM fouten WHERE ip = ?');
     $st->execute([$ip]);
     $f = $st->fetch() ?: ['aantal' => 0, 'tot' => 0];
-    if ((int)$f['tot'] > $nu) {
-        fail('Te vaak een verkeerde pincode. Probeer het over ' . (int)ceil(((int)$f['tot'] - $nu) / 60) . ' minuten opnieuw.', 429);
+    $aantal = (int)$f['tot'] > 0 ? 1 : (int)$f['aantal'] + 1;   // na een verlopen slot opnieuw tellen
+    $tot = $aantal >= MAX_FOUTEN ? time() + LOCK_SECONDS : 0;
+    $db->prepare('INSERT INTO fouten (ip, aantal, tot) VALUES (?, ?, ?)
+                  ON CONFLICT(ip) DO UPDATE SET aantal = excluded.aantal, tot = excluded.tot')->execute([$ip, $aantal, $tot]);
+    fail($tot ? 'Te vaak een verkeerde pincode. Probeer het over 15 minuten opnieuw.' : 'Verkeerde pincode.', $tot ? 429 : 403);
+}
+function slot_ok(): void {
+    global $db;
+    $db->prepare('DELETE FROM fouten WHERE ip = ?')->execute([$_SERVER['REMOTE_ADDR'] ?? '?']);
+}
+
+// Zoekt de gebruiker bij deze pincode (pincodes zijn uniek).
+function gebruiker_met_pin(string $pin): array {
+    global $db;
+    slot_controleren();
+    $alle = $db->query('SELECT id, naam, rol, pin_hash FROM gebruikers')->fetchAll();
+    if (!$alle) fail('Er is nog geen gebruiker ingesteld op de server.', 503);
+    if (preg_match('/^\d{4,8}$/', $pin)) {
+        foreach ($alle as $g) {
+            if (password_verify($pin, $g['pin_hash'])) { slot_ok(); return $g; }
+        }
     }
-    $hash = instelling('pin_hash');
-    if ($hash === null) fail('Er is nog geen pincode ingesteld op de server.', 503);
-    if (!preg_match('/^\d{4,8}$/', $pin) || !password_verify($pin, $hash)) {
-        $aantal = (int)$f['tot'] > 0 ? 1 : (int)$f['aantal'] + 1;   // na een verlopen slot opnieuw tellen
-        $tot = $aantal >= MAX_FOUTEN ? $nu + LOCK_SECONDS : 0;
-        $db->prepare('INSERT INTO fouten (ip, aantal, tot) VALUES (?, ?, ?)
-                      ON CONFLICT(ip) DO UPDATE SET aantal = excluded.aantal, tot = excluded.tot')->execute([$ip, $aantal, $tot]);
-        fail($tot ? 'Te vaak een verkeerde pincode. Probeer het over 15 minuten opnieuw.' : 'Verkeerde pincode.', $tot ? 429 : 403);
+    slot_fout();
+}
+
+function pin_in_gebruik(string $pin, int $behalve = 0): bool {
+    global $db;
+    foreach ($db->query('SELECT id, pin_hash FROM gebruikers')->fetchAll() as $g) {
+        if ((int)$g['id'] !== $behalve && password_verify($pin, $g['pin_hash'])) return true;
     }
-    $db->prepare('DELETE FROM fouten WHERE ip = ?')->execute([$ip]);
+    return false;
 }
 
 /* ---- gegevens ---- */
@@ -229,18 +280,75 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
     return null;
 }
 
+// Wat mag familie (opa, oma, oppas) veranderen? Klusjes melden en muntjes geven (met berichtje),
+// aanvragen goedkeuren of afwijzen, en timers bedienen. Kaarten, kinderen en instellingen niet.
+function familie_fout(array $oud, array $nieuw, string $naam): ?string {
+    $nee = 'Dit mag alleen papa of mama aanpassen.';
+    foreach (array_unique(array_merge(array_keys($oud), array_keys($nieuw))) as $k) {
+        if (in_array($k, ['tx', 'timers', 'nextId'], true)) continue;
+        if (!gelijk($oud[$k] ?? null, $nieuw[$k] ?? null)) return $nee;
+    }
+    if ((int)($nieuw['nextId'] ?? 0) < (int)($oud['nextId'] ?? 0)) return $nee;
+
+    $o = [];
+    foreach ($oud['tx'] ?? [] as $t) if (is_array($t) && isset($t['id'])) $o[(string)$t['id']] = $t;
+    $n = [];
+    foreach ($nieuw['tx'] ?? [] as $t) {
+        if (!is_array($t) || !isset($t['id'])) return $nee;
+        $n[(string)$t['id']] = $t;
+    }
+    foreach ($o as $id => $t) {
+        if (!isset($n[$id])) return $nee;
+        if (gelijk($t, $n[$id])) continue;
+        // Alleen een openstaande aanvraag goedkeuren of afwijzen
+        $a = $t;
+        $b = $n[$id];
+        unset($a['status'], $b['status'], $b['beslistDoor']);
+        if (($t['status'] ?? '') !== 'aangevraagd' || !in_array($n[$id]['status'] ?? '', ['goed', 'afgewezen'], true)
+            || !gelijk($a, $b) || ($n[$id]['beslistDoor'] ?? '') !== $naam) return $nee;
+    }
+    $klusjes = array_column($oud['klusjes'] ?? [], null, 'id');
+    foreach ($n as $id => $t) {
+        if (isset($o[$id])) continue;
+        if (($t['bron'] ?? '') !== 'ouder' || ($t['status'] ?? '') !== 'goed' || ($t['door'] ?? '') !== $naam) return $nee;
+        $bedrag = $t['amount'] ?? null;
+        if (($t['type'] ?? '') === 'klus') {
+            $ref = (string)($t['ref'] ?? '');
+            if (!isset($klusjes[$ref]) || $bedrag !== $klusjes[$ref]['waarde']) return 'Onbekend klusje.';
+        } elseif (($t['type'] ?? '') === 'overig') {
+            if (!is_int($bedrag) || $bedrag < 1 || $bedrag > 20) return 'Familie kan alleen muntjes geven, niet afhalen.';
+        } else {
+            return $nee;
+        }
+        if (!is_string($t['label'] ?? null) || mb_strlen($t['label']) > 60 || mb_strlen((string)($t['msg'] ?? '')) > 200) return $nee;
+    }
+    return null;
+}
+
+function gebruikers_lijst(): array {
+    global $db;
+    return array_map(fn($g) => ['id' => (int)$g['id'], 'naam' => $g['naam'], 'rol' => $g['rol']],
+        $db->query('SELECT id, naam, rol FROM gebruikers ORDER BY rol DESC, aangemaakt')->fetchAll());
+}
+function aantal_ouders(int $behalve = 0): int {
+    global $db;
+    $st = $db->prepare("SELECT COUNT(*) FROM gebruikers WHERE rol = 'ouder' AND id != ?");
+    $st->execute([$behalve]);
+    return (int)$st->fetchColumn();
+}
+
 /* ---- acties ---- */
 switch ($actie) {
     case 'status': {
         $w = wie();
-        out(['rol' => $w['rol'] ?? null, 'kid' => $w['kid'] ?? null]);
+        out(['rol' => $w['rol'] ?? null, 'kid' => $w['kid'] ?? null, 'naam' => $w['naam'] ?? null, 'id' => $w['id'] ?? null]);
     }
 
     case 'inloggen': {
         need_post();
-        controleer_pin((string)($in['pin'] ?? ''));
+        $g = gebruiker_met_pin((string)($in['pin'] ?? ''));
         session_regenerate_id(true);
-        $_SESSION['ouder'] = true;
+        $_SESSION['gebruiker'] = (int)$g['id'];
         out(['ok' => true]);
     }
 
@@ -254,7 +362,8 @@ switch ($actie) {
     // Tablet koppelen, stap 1: pincode van een ouder, dan de lijst met kinderen.
     case 'koppelstart': {
         need_post();
-        controleer_pin((string)($in['pin'] ?? ''));
+        $g = gebruiker_met_pin((string)($in['pin'] ?? ''));
+        if ($g['rol'] !== 'ouder') fail('Alleen papa of mama kan een tablet koppelen.', 403);
         $_SESSION['koppel_tot'] = time() + 300;
         $s = lees_staat();
         $kids = $s ? (json_decode($s['data'], true)['kids'] ?? []) : [];
@@ -309,6 +418,10 @@ switch ($actie) {
             if (!$s) fail('Dit mag alleen papa of mama aanpassen.', 403);
             $fout = kind_fout(json_decode($s['data'], true), $in['data'], $w['kid']);
             if ($fout) fail($fout, 403);
+        } elseif ($w['rol'] === 'familie') {
+            if (!$s) fail('Dit mag alleen papa of mama aanpassen.', 403);
+            $fout = familie_fout(json_decode($s['data'], true), $in['data'], $w['naam']);
+            if ($fout) fail($fout, 403);
         }
         $db->prepare('INSERT INTO staat (id, versie, data, bijgewerkt) VALUES (1, ?, ?, ?)
                       ON CONFLICT(id) DO UPDATE SET versie = excluded.versie, data = excluded.data, bijgewerkt = excluded.bijgewerkt')
@@ -333,14 +446,57 @@ switch ($actie) {
         out(['ok' => true]);
     }
 
+    // Eigen pincode wijzigen (ouder en familie)
     case 'pin': {
         need_post();
-        need_ouder();
-        controleer_pin((string)($in['oud'] ?? ''));
+        $w = need_volwassene();
+        slot_controleren();
+        $st = $db->prepare('SELECT pin_hash FROM gebruikers WHERE id = ?');
+        $st->execute([$w['id']]);
+        if (!password_verify((string)($in['oud'] ?? ''), (string)$st->fetchColumn())) slot_fout();
+        slot_ok();
         $nieuw = (string)($in['nieuw'] ?? '');
         if (!preg_match('/^\d{4,8}$/', $nieuw)) fail('De nieuwe pincode moet uit 4 tot 8 cijfers bestaan.');
-        zet_instelling('pin_hash', password_hash($nieuw, PASSWORD_DEFAULT));
+        if (pin_in_gebruik($nieuw, $w['id'])) fail('Deze pincode is al van iemand anders. Kies een andere.');
+        $db->prepare('UPDATE gebruikers SET pin_hash = ? WHERE id = ?')->execute([password_hash($nieuw, PASSWORD_DEFAULT), $w['id']]);
         out(['ok' => true]);
+    }
+
+    case 'gebruikers': {
+        need_ouder();
+        out(['gebruikers' => gebruikers_lijst()]);
+    }
+
+    // Gebruiker toevoegen of aanpassen (alleen ouders). Pincode verplicht bij nieuw, anders optioneel.
+    case 'gebruiker': {
+        need_post();
+        $w = need_ouder();
+        $id = (int)($in['id'] ?? 0);
+        $naam = trim(str_replace(['<', '>', '&', '"'], '', (string)($in['naam'] ?? '')));
+        $rol = (string)($in['rol'] ?? '');
+        $pin = (string)($in['pin'] ?? '');
+        if ($naam === '' || mb_strlen($naam) > 30) fail('Vul een naam in (maximaal 30 tekens).');
+        if (!in_array($rol, ['ouder', 'familie'], true)) fail('Kies Ouder of Familie.');
+        if (($id === 0 || $pin !== '') && !preg_match('/^\d{4,8}$/', $pin)) fail('De pincode moet uit 4 tot 8 cijfers bestaan.');
+        if ($pin !== '' && pin_in_gebruik($pin, $id)) fail('Deze pincode is al van iemand anders. Kies een andere.');
+        if ($id === 0) {
+            $db->prepare('INSERT INTO gebruikers (naam, rol, pin_hash, aangemaakt) VALUES (?, ?, ?, ?)')
+               ->execute([$naam, $rol, password_hash($pin, PASSWORD_DEFAULT), time()]);
+        } else {
+            if ($rol !== 'ouder' && aantal_ouders($id) === 0) fail('Er moet altijd minstens één ouder zijn.');
+            $db->prepare('UPDATE gebruikers SET naam = ?, rol = ? WHERE id = ?')->execute([$naam, $rol, $id]);
+            if ($pin !== '') $db->prepare('UPDATE gebruikers SET pin_hash = ? WHERE id = ?')->execute([password_hash($pin, PASSWORD_DEFAULT), $id]);
+        }
+        out(['gebruikers' => gebruikers_lijst()]);
+    }
+
+    case 'gebruiker_weg': {
+        need_post();
+        need_ouder();
+        $id = (int)($in['id'] ?? 0);
+        if (aantal_ouders($id) === 0) fail('Er moet altijd minstens één ouder zijn.');
+        $db->prepare('DELETE FROM gebruikers WHERE id = ?')->execute([$id]);
+        out(['gebruikers' => gebruikers_lijst()]);
     }
 
     default:

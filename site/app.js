@@ -34,6 +34,7 @@ const IC = {
   ball: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
   chev: 'M9 6l6 6-6 6',
   slot: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4',
+  persoon: 'M12 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M4 21c0-4 3.6-6 8-6s8 2 8 6',
   herhaal: 'M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3',
   minus: 'M5 12h14M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0',
   melden: 'M12 8v8M8 12h8M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0',
@@ -264,7 +265,11 @@ function zet(patch) {
 }
 
 // ---------- server (alleen in de echte app) ----------
-let rol = null;          // 'ouder' of 'kind' zodra ingelogd of gekoppeld
+let rol = null;          // 'ouder', 'familie' of 'kind' zodra ingelogd of gekoppeld
+let ik = null;           // ingelogde gebruiker: { id, naam }
+const volwassene = () => rol === 'ouder' || rol === 'familie';
+const magBeheren = () => DEMO || rol === 'ouder';
+const mijnNaam = () => (DEMO ? 'Papa' : (ik && ik.naam) || '');
 let geladen = DEMO;
 let versie = 0;          // versie van de gegevens op de server
 let onbevestigd = [];    // wijzigingen die de server nog niet heeft bevestigd
@@ -343,6 +348,7 @@ async function haal(alles) {
 
 function afgemeld() {
   rol = null;
+  ik = null;
   versie = 0;
   onbevestigd = [];
   geladen = true;
@@ -358,13 +364,14 @@ async function start() {
     render();
     return;
   }
-  if (r.data.rol !== 'ouder' && r.data.rol !== 'kind') {
+  if (!['ouder', 'familie', 'kind'].includes(r.data.rol)) {
     if (leesToken()) zetToken('');   // tablet was ontkoppeld
     afgemeld();
     return;
   }
   rol = r.data.rol;
-  s = { ...s, login: null, tabletKid: rol === 'kind' ? r.data.kid : null };
+  ik = rol === 'kind' ? null : { id: r.data.id, naam: r.data.naam };
+  s = { ...s, login: null, tabletKid: rol === 'kind' ? r.data.kid : null, scherm: rol === 'familie' && s.scherm === 'beheer' ? 'melden' : s.scherm };
   await haal(true);
   if (!rol) return;
   if (rol === 'ouder' && versie === 0) {
@@ -374,13 +381,13 @@ async function start() {
     synchroniseer();
   }
   geladen = true;
-  if (rol === 'ouder' && s.scherm === 'beheer') laadApparaten();
+  if (rol === 'ouder' && s.scherm === 'beheer') laadBeheer();
   render();
 }
 
-async function laadApparaten() {
-  const r = await api('apparaten');
-  if (r.ok) zet({ apparaten: r.data.apparaten || [] });
+async function laadBeheer() {
+  const [a, g] = await Promise.all([api('apparaten'), api('gebruikers')]);
+  zet({ apparaten: a.ok ? a.data.apparaten || [] : s.apparaten, gebruikers: g.ok ? g.data.gebruikers || [] : s.gebruikers });
 }
 
 function melding(tekst) {
@@ -460,7 +467,7 @@ const acties = {
   tablet(d) { zet({ tabletKid: d.id }); },
   nav(d) {
     zet({ scherm: d.id, sheet: null });
-    if (!DEMO && d.id === 'beheer') laadApparaten();
+    if (!DEMO && d.id === 'beheer' && rol === 'ouder') laadBeheer();
   },
   sluit() { zet({ sheet: null, bericht: '', ovZeker: false }); },
 
@@ -472,7 +479,7 @@ const acties = {
     const klus = s.sheet && klusVan(s.sheet.id);
     const kid = kidVan(d.id);
     if (!klus || stats(kid.id).week + klus.waarde > s.maxWeek || gebruikt(kid.id, 'klus', klus) >= klus.keer) return;
-    voegToe({ kid: kid.id, type: 'klus', ref: klus.id, label: klus.naam, amount: klus.waarde, status: 'goed', bron: 'ouder', msg: s.bericht.trim() });
+    voegToe({ kid: kid.id, type: 'klus', ref: klus.id, label: klus.naam, amount: klus.waarde, status: 'goed', bron: 'ouder', door: mijnNaam(), msg: s.bericht.trim() });
     zet({ sheet: null, bericht: '' });
     melding('+' + klus.waarde + ' voor ' + kid.naam + ' · ' + klus.naam);
   },
@@ -483,7 +490,7 @@ const acties = {
   },
   ovKid(d) { zet({ ovKid: d.id, ovAmt: 1, ovZeker: false }); },
   ovPlus() { zet({ ovSign: 1, ovZeker: false }); },
-  ovMin() { zet({ ovSign: -1, ovAmt: 1, ovZeker: false }); },
+  ovMin() { if (magBeheren()) zet({ ovSign: -1, ovAmt: 1, ovZeker: false }); },
   ovMinder() { const o = overigInfo(); zet({ ovAmt: Math.max(1, o.aantal - 1), ovZeker: false }); },
   ovMeer() { const o = overigInfo(); zet({ ovAmt: Math.min(o.max, o.aantal + 1), ovZeker: false }); },
   ovBevestig() {
@@ -491,7 +498,7 @@ const acties = {
     if (o.uit) return;
     if (o.isMin && !s.ovZeker) { zet({ ovZeker: true }); return; }
     const reden = s.ovReden.trim();
-    voegToe({ kid: s.ovKid, type: 'overig', ref: null, label: reden, amount: s.ovSign * o.aantal, status: 'goed', bron: 'ouder' });
+    voegToe({ kid: s.ovKid, type: 'overig', ref: null, label: reden, amount: s.ovSign * o.aantal, status: 'goed', bron: 'ouder', door: mijnNaam() });
     zet({ sheet: null, ovReden: '', ovAmt: 1, ovZeker: false });
     melding((o.isMin ? '−' + o.aantal + ' van ' : '+' + o.aantal + ' voor ') + o.kind.naam + ' · ' + reden);
   },
@@ -508,7 +515,7 @@ const acties = {
     }
     const b = isKlus ? null : belVan(t.ref);
     zet((st) => ({
-      tx: st.tx.map((x) => (x.id === t.id ? { ...x, status: ok ? 'goed' : 'afgewezen' } : x)),
+      tx: st.tx.map((x) => (x.id === t.id ? { ...x, status: ok ? 'goed' : 'afgewezen', beslistDoor: mijnNaam() } : x)),
       timers: ok && b && b.duur ? [...st.timers, { id: 't' + t.id, kid: t.kid, ref: b.id, naam: b.naam, totaal: b.duur * 60, rest: b.duur * 60, status: 'wacht', eind: null }] : st.timers
     }));
     if (isKlus) melding(ok ? '+' + t.amount + ' voor ' + kid.naam + ' · ' + t.label : kid.naam + ': melding afgewezen');
@@ -626,7 +633,7 @@ const acties = {
     zet({ login: { ...l, bezig: true } });
     const r = await api(l.doel === 'ouder' ? 'inloggen' : 'koppelstart', { pin: l.pin });
     if (!r.ok) { zet({ login: { ...l, pin: '', bezig: false, fout: r.data.fout || 'Geen verbinding met de server.' } }); return; }
-    if (l.doel === 'ouder') { await start(); return; }
+    if (l.doel === 'ouder') { s = { ...s, scherm: 'melden' }; await start(); return; }
     const kids = r.data.kids || [];
     zet({ login: { stap: 'kind', kids, pin: '', fout: kids.length ? '' : 'Er zijn nog geen kinderen. Voeg ze eerst toe in de ouder-app (Beheer).' } });
   },
@@ -643,7 +650,29 @@ const acties = {
   },
   async ontkoppel(d) {
     const r = await api('ontkoppel', { id: Number(d.id) });
-    if (r.ok) { melding('Tablet ontkoppeld'); laadApparaten(); }
+    if (r.ok) { melding('Tablet ontkoppeld'); laadBeheer(); }
+  },
+  gebruikerOpen(d) {
+    const g = (s.gebruikers || []).find((x) => String(x.id) === d.id);
+    zet({ sheet: { type: 'gebruiker', id: g ? g.id : 0, zeker: false }, gbNaam: g ? g.naam : '', gbRol: g ? g.rol : 'familie', gbPin: '', gbFout: '' });
+  },
+  gbRol(d) { zet({ gbRol: d.id }); },
+  async gebruikerOpslaan() {
+    const id = s.sheet.id;
+    const r = await api('gebruiker', { id, naam: s.gbNaam || '', rol: s.gbRol, pin: s.gbPin || '' });
+    if (!r.ok) { zet({ gbFout: r.data.fout || 'Geen verbinding met de server.' }); return; }
+    zet({ sheet: null, gebruikers: r.data.gebruikers, gbPin: '', gbFout: '' });
+    melding('Opgeslagen: ' + (s.gbNaam || '').trim());
+    if (ik && id === ik.id) start();   // eigen naam of rol is veranderd
+  },
+  async gebruikerWeg() {
+    if (!s.sheet.zeker) { zet({ sheet: { ...s.sheet, zeker: true } }); return; }
+    const r = await api('gebruiker_weg', { id: s.sheet.id });
+    if (!r.ok) { zet({ gbFout: r.data.fout || 'Geen verbinding met de server.' }); return; }
+    const zelf = ik && s.sheet.id === ik.id;
+    zet({ sheet: null, gebruikers: r.data.gebruikers });
+    melding('Gebruiker verwijderd');
+    if (zelf) start();
   },
   pinOpen() { zet({ sheet: { type: 'pin' }, pinOud: '', pinNieuw: '', pinFout: '' }); },
   async pinOpslaan() {
@@ -691,20 +720,20 @@ function overigInfo() {
 
 // ---------- ouder-app ----------
 function renderOuder() {
-  const titels = { melden: 'Klusje melden', aanvragen: 'Aanvragen', timers: 'Timers', beheer: 'Beheer' };
+  const titels = { melden: 'Klusje melden', aanvragen: 'Aanvragen', timers: 'Timers', beheer: magBeheren() ? 'Beheer' : 'Account' };
   const schermen = { melden: schermMelden, aanvragen: schermAanvragen, timers: schermTimers, beheer: schermBeheer };
   const aantalAanvragen = s.tx.filter((t) => t.status === 'aangevraagd').length;
   const navs = [
     ['melden', 'Melden', IC.melden, 0],
     ['aanvragen', 'Aanvragen', IC.inbox, aantalAanvragen],
     ['timers', 'Timers', IC.klok, s.timers.length],
-    ['beheer', 'Beheer', IC.beheer, 0]
+    ['beheer', magBeheren() ? 'Beheer' : 'Account', magBeheren() ? IC.beheer : IC.persoon, 0]
   ];
   return `
     <div class="p-head">
       <div class="p-brand">${coin(28)}<span>Muntjes</span></div>
       <span class="p-rechts">
-        <span class="p-title">${titels[s.scherm]}</span>
+        <span class="p-title">${DEMO || !ik ? titels[s.scherm] : esc(ik.naam) + ' · ' + titels[s.scherm]}</span>
         ${DEMO ? '' : `<button type="button" class="p-slot" data-a="vergrendel" aria-label="Vergrendelen">${icon(IC.slot, 22, 1.8)}</button>`}
       </span>
     </div>
@@ -717,7 +746,7 @@ function renderOuder() {
         </button>`).join('')}
     </nav>
     ${s.toast ? `<div class="toast" role="status">${coin(22)}<span>${esc(s.toast)}</span></div>` : ''}
-    ${sheetKlus()}${sheetOverig()}${sheetBewerk()}${sheetPin()}`;
+    ${sheetKlus()}${sheetOverig()}${sheetBewerk()}${sheetPin()}${sheetGebruiker()}`;
 }
 
 function schermMelden() {
@@ -824,7 +853,17 @@ function schermTimers() {
     </div>` : ''}`;
 }
 
+function schermAccount() {
+  return `
+    <p class="sec-sub" style="margin:0 0 14px">Je bent ingelogd als <b>${esc(ik ? ik.naam : '')}</b> (familie). Je kunt klusjes melden, muntjes geven en aanvragen goedkeuren. Kaarten en instellingen past papa of mama aan.</p>
+    <div class="lijst">
+      <button type="button" class="lrij" data-a="pinOpen"><span class="grow">Mijn pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>
+    </div>
+    <button type="button" class="btn btn-ink vol" data-a="vergrendel">${icon(IC.slot, 18, 2)} Uitloggen</button>`;
+}
+
 function schermBeheer() {
+  if (!magBeheren()) return schermAccount();
   const rij = (soort, id, links, naam, rechts) => `<button type="button" class="lrij" data-a="bewerk" data-x="${soort}" data-id="${id}">
     ${links}<span class="grow">${naam}</span><span class="r">${rechts}</span>${icon(IC.chev, 18, 2)}
   </button>`;
@@ -867,9 +906,17 @@ function schermBeheer() {
       </div>
       ${DEMO
         ? '<div class="lrij"><span class="grow">Pincode</span><span class="r">Alleen in de echte app</span></div>'
-        : `<button type="button" class="lrij" data-a="pinOpen"><span class="grow">Pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>`}
+        : `<button type="button" class="lrij" data-a="pinOpen"><span class="grow">Mijn pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>`}
     </div>
     ${DEMO ? '' : `
+    <h2 class="sec">Gebruikers</h2>
+    <p class="sec-sub">Iedereen logt in met een eigen pincode. Ouders mogen alles; familie mag klusjes melden, muntjes geven en aanvragen goedkeuren.</p>
+    <div class="lijst">
+      ${(s.gebruikers || []).map((g) => `<button type="button" class="lrij" data-a="gebruikerOpen" data-id="${g.id}">
+        ${icon(IC.persoon, 22)}<span class="grow">${esc(g.naam)}${ik && g.id === ik.id ? ' (jij)' : ''}</span><span class="r">${g.rol === 'ouder' ? 'Ouder' : 'Familie'}</span>${icon(IC.chev, 18, 2)}
+      </button>`).join('')}
+      <button type="button" class="lrij toevoegen" data-a="gebruikerOpen" data-id="0">+ Gebruiker toevoegen</button>
+    </div>
     <h2 class="sec">Gekoppelde tablets</h2>
     <div class="lijst">
       ${(s.apparaten || []).length
@@ -940,6 +987,35 @@ function sheetBewerk() {
   </div>`;
 }
 
+function sheetGebruiker() {
+  if (!s.sheet || s.sheet.type !== 'gebruiker') return '';
+  const g = s.sheet;
+  const nieuw = !g.id;
+  return `<div class="sheet-wrap">
+    <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-gb">
+      <div class="sh-title" id="sh-gb">${nieuw ? 'Gebruiker toevoegen' : 'Gebruiker aanpassen'}</div>
+      <label class="lbl" for="gb-naam">Naam</label>
+      <input class="inp" id="gb-naam" data-input="gbNaam" value="${esc(s.gbNaam || '')}" maxlength="30" autocomplete="off" placeholder="Bijv. Oma">
+      <div class="lbl">Wat mag deze persoon?</div>
+      <div class="grid2" style="gap:8px">
+        <button type="button" class="seg${s.gbRol === 'ouder' ? ' on' : ''}" aria-pressed="${s.gbRol === 'ouder'}" data-a="gbRol" data-id="ouder">Ouder</button>
+        <button type="button" class="seg${s.gbRol === 'familie' ? ' on' : ''}" aria-pressed="${s.gbRol === 'familie'}" data-a="gbRol" data-id="familie">Familie</button>
+      </div>
+      <p class="muted" style="margin:0">${s.gbRol === 'ouder' ? 'Mag alles: ook kaarten, kinderen, instellingen, gebruikers en tablets.' : 'Mag klusjes melden, muntjes geven met een berichtje, aanvragen goedkeuren en timers bedienen. Geen muntjes afhalen of iets aanpassen in Beheer.'}</p>
+      <label class="lbl" for="gb-pin">${nieuw ? 'Pincode (4 tot 8 cijfers)' : 'Nieuwe pincode (leeg laten = niet wijzigen)'}</label>
+      <input class="inp" id="gb-pin" type="password" inputmode="numeric" autocomplete="new-password" data-input="gbPin" value="${esc(s.gbPin || '')}">
+      ${g.zeker ? `<div class="warn">Weet je het zeker? ${esc(s.gbNaam || '')} kan daarna niet meer inloggen. Tik nog een keer op Verwijderen.</div>` : ''}
+      ${s.gbFout ? `<div class="warn" role="alert">${esc(s.gbFout)}</div>` : ''}
+      <div class="flex">
+        ${nieuw ? '' : '<button type="button" class="btn btn-stop" data-a="gebruikerWeg">Verwijderen</button>'}
+        <button type="button" class="btn btn-soft" data-a="sluit">Annuleren</button>
+        <button type="button" class="btn wide btn-primary" data-a="gebruikerOpslaan">Opslaan</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function sheetPin() {
   if (!s.sheet || s.sheet.type !== 'pin') return '';
   return `<div class="sheet-wrap">
@@ -970,7 +1046,7 @@ function renderWelkom() {
       <p class="w-sub">Wie gebruikt dit apparaat?</p>
       <button type="button" class="w-keuze" data-a="welkom" data-id="ouder">
         <span class="icobox">${icon(IC.slot, 26, 1.8)}</span>
-        <span class="col"><b>Papa of mama</b><small>Inloggen met de pincode</small></span>
+        <span class="col"><b>Inloggen</b><small>Papa, mama, opa, oma… met je eigen pincode</small></span>
       </button>
       <button type="button" class="w-keuze" data-a="welkom" data-id="koppel">
         <span class="icobox geel">${icon(IC.tablet, 26, 1.8)}</span>
@@ -984,7 +1060,7 @@ function renderWelkom() {
       return `<button type="button" class="pk" data-a="toets" data-id="${k}">${k}</button>`;
     }).join('');
     inhoud = `
-      <p class="w-sub">${l.doel === 'ouder' ? 'Vul je pincode in' : 'Pincode van papa of mama'}</p>
+      <p class="w-sub">${l.doel === 'ouder' ? 'Vul je eigen pincode in' : 'Pincode van papa of mama'}</p>
       <div class="pin-stip" role="status" aria-label="${l.pin.length} cijfers ingevuld">${stippen}</div>
       <div class="pinpad">${toetsen}</div>
       <button type="button" class="btn btn-soft" data-a="terug">Terug</button>`;
@@ -1055,7 +1131,7 @@ function sheetOverig() {
       </div>
       <div class="grid2" style="gap:8px">
         <button type="button" class="seg${o.isMin ? '' : ' plus-on'}" aria-pressed="${!o.isMin}" data-a="ovPlus">+ Bijschrijven</button>
-        <button type="button" class="seg${o.isMin ? ' min-on' : ''}" aria-pressed="${o.isMin}" data-a="ovMin">− Afhalen</button>
+        ${magBeheren() ? `<button type="button" class="seg${o.isMin ? ' min-on' : ''}" aria-pressed="${o.isMin}" data-a="ovMin">− Afhalen</button>` : ''}
       </div>
       <div class="stepper">
         <span class="lbl grow">Aantal muntjes</span>
@@ -1102,7 +1178,8 @@ function renderKind() {
     const rood = t.type === 'overig' && t.amount < 0;
     const rij = rood ? ' rood' : t.status === 'aangevraagd' ? ' wacht' : t.status === 'afgewezen' ? ' af' : '';
     const kleur = t.status === 'aangevraagd' ? 'wachtc' : t.status === 'afgewezen' ? 'afc' : t.amount < 0 ? 'neg' : 'pos';
-    const door = t.bron === 'kind' ? (t.type === 'klus' ? 'zelf gemeld' : 'zelf aangevraagd') : 'door papa';
+    const door = (t.bron === 'kind' ? (t.type === 'klus' ? 'zelf gemeld' : 'zelf aangevraagd') : 'door ' + (t.door || 'papa'))
+      + (t.beslistDoor && t.status !== 'aangevraagd' ? (t.status === 'goed' ? ', goedgekeurd door ' : ', afgewezen door ') + t.beslistDoor : '');
     const status = t.status === 'aangevraagd' ? (t.amount < 0 ? 'gereserveerd' : 'wacht op goedkeuring') : t.status === 'afgewezen' ? (t.amount < 0 ? 'afgewezen, terug' : 'niet goedgekeurd') : '';
     return `<div class="lrow${rij}">
       <span class="lico">${icon(ic, 24)}</span>
@@ -1245,7 +1322,7 @@ function render() {
   $('#bar').innerHTML = DEMO ? renderBar() : '';
   $('#col-ouder').hidden = weergave === 'kind';
   $('#col-kind').hidden = weergave === 'ouder';
-  $('#ouder').innerHTML = weergave === 'kind' ? '' : !DEMO && rol !== 'ouder' ? renderWelkom() : renderOuder();
+  $('#ouder').innerHTML = weergave === 'kind' ? '' : !DEMO && !volwassene() ? renderWelkom() : renderOuder();
   $('#kind').innerHTML = weergave === 'ouder' ? '' : renderKind();
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
 
@@ -1303,7 +1380,7 @@ window.addEventListener('resize', () => {
 const gepiept = new Set();
 setInterval(() => {
   const lopend = s.timers.filter((t) => t.status === 'loopt');
-  if (!lopend.length || (!DEMO && rol !== 'ouder')) return;
+  if (!lopend.length || (!DEMO && !volwassene())) return;
   lopend.forEach((t) => {
     const sleutel = t.id + ':' + t.eind;
     if (timerKlaar(t) && !gepiept.has(sleutel)) {
