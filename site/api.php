@@ -247,10 +247,23 @@ function gelijk($a, $b): bool {
 function kind_fout(array $oud, array $nieuw, string $kid): ?string {
     $nee = 'Dit mag alleen papa of mama aanpassen.';
     foreach (array_unique(array_merge(array_keys($oud), array_keys($nieuw))) as $k) {
-        if ($k === 'tx' || $k === 'nextId') continue;
+        if ($k === 'tx' || $k === 'nextId' || $k === 'focus') continue;
         if (!gelijk($oud[$k] ?? null, $nieuw[$k] ?? null)) return $nee;
     }
     if ((int)($nieuw['nextId'] ?? 0) < (int)($oud['nextId'] ?? 0)) return $nee;
+
+    // Weekfocus: alleen die van het eigen kind, met bestaande taken en niet meer dan toegestaan.
+    $fo = is_array($oud['focus'] ?? null) ? $oud['focus'] : [];
+    $fn = is_array($nieuw['focus'] ?? null) ? $nieuw['focus'] : [];
+    foreach (array_unique(array_merge(array_keys($fo), array_keys($fn))) as $k) {
+        if ((string)$k !== $kid && !gelijk($fo[$k] ?? null, $fn[$k] ?? null)) return $nee;
+    }
+    if (isset($fn[$kid])) {
+        $ids = $fn[$kid]['ids'] ?? null;
+        $takenIds = array_column($oud['taken'] ?? [], 'id');
+        if (!is_array($ids) || count($ids) > (int)($oud['maxFocus'] ?? 3) || !is_int($fn[$kid]['week'] ?? null)) return $nee;
+        foreach ($ids as $id) if (!in_array($id, $takenIds, true)) return $nee;
+    }
 
     $o = [];
     foreach ($oud['tx'] ?? [] as $t) if (is_array($t) && isset($t['id'])) $o[(string)$t['id']] = $t;
@@ -275,6 +288,7 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
 
     $klusjes = array_column($oud['klusjes'] ?? [], null, 'id');
     $beloningen = array_column($oud['beloningen'] ?? [], null, 'id');
+    $taken = array_column($oud['taken'] ?? [], null, 'id');
     foreach ($n as $id => $t) {
         if (isset($o[$id])) continue;
         if (!$eigenOpen($t)) return $nee;
@@ -282,6 +296,8 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
         $bedrag = $t['amount'] ?? null;
         if (($t['type'] ?? '') === 'klus') {
             if (!isset($klusjes[$ref]) || $bedrag !== $klusjes[$ref]['waarde']) return 'Onbekend klusje.';
+        } elseif (($t['type'] ?? '') === 'ster') {
+            if (!isset($taken[$ref]) || $bedrag !== 0) return 'Onbekende taak.';
         } elseif (($t['type'] ?? '') === 'beloning') {
             if (!isset($beloningen[$ref]) || $bedrag !== -$beloningen[$ref]['kosten']) return 'Onbekende beloning.';
         } else {
@@ -312,7 +328,7 @@ function familie_fout(array $oud, array $nieuw, string $naam): ?string {
     foreach ($o as $id => $t) {
         if (!isset($n[$id])) return $nee;
         if (gelijk($t, $n[$id])) continue;
-        // Alleen een openstaande aanvraag goedkeuren of afwijzen
+        // Alleen een openstaande aanvraag (of gemelde ster) goedkeuren of afwijzen
         $a = $t;
         $b = $n[$id];
         unset($a['status'], $b['status'], $b['beslistDoor']);
@@ -320,13 +336,18 @@ function familie_fout(array $oud, array $nieuw, string $naam): ?string {
             || !gelijk($a, $b) || ($n[$id]['beslistDoor'] ?? '') !== $naam) return $nee;
     }
     $klusjes = array_column($oud['klusjes'] ?? [], null, 'id');
+    $taken = array_column($oud['taken'] ?? [], null, 'id');
     foreach ($n as $id => $t) {
         if (isset($o[$id])) continue;
         if (($t['bron'] ?? '') !== 'ouder' || ($t['status'] ?? '') !== 'goed' || ($t['door'] ?? '') !== $naam) return $nee;
         $bedrag = $t['amount'] ?? null;
+        $ref = (string)($t['ref'] ?? '');
         if (($t['type'] ?? '') === 'klus') {
-            $ref = (string)($t['ref'] ?? '');
             if (!isset($klusjes[$ref]) || $bedrag !== $klusjes[$ref]['waarde']) return 'Onbekend klusje.';
+        } elseif (($t['type'] ?? '') === 'ster') {
+            if (!isset($taken[$ref]) || $bedrag !== 0) return 'Onbekende taak.';
+        } elseif (($t['type'] ?? '') === 'taakklaar') {
+            if (!isset($taken[$ref]) || $bedrag !== $taken[$ref]['beloning']) return 'Onbekende taak.';
         } elseif (($t['type'] ?? '') === 'overig') {
             if (!is_int($bedrag) || $bedrag < 1 || $bedrag > 20) return 'Familie kan alleen muntjes geven, niet afhalen.';
         } else {

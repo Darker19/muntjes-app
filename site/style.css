@@ -258,6 +258,16 @@ body.echt .phone { background: var(--soft); }
 .pk.ok { background: var(--accent); border-color: var(--accent); color: #fff; font-size: 20px; }
 .pk:disabled { opacity: .5; }
 
+/* Taken */
+.taken-knop { min-height: 48px; padding: 0 16px; border-radius: 999px; border: 2px solid #FBBF24; background: #FFF8E1; display: inline-flex; align-items: center; gap: 8px; font-family: Fredoka, sans-serif; font-size: 18px; font-weight: 600; color: #7A4A00; }
+.taken-knop.on { background: #fff; border-color: var(--line); color: var(--ink); }
+.sterren-tel { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-family: Fredoka, sans-serif; font-size: 44px; font-weight: 600; color: #7A4A00; }
+.tgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.tkaart { min-height: 180px; border-radius: 24px; padding: 18px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; text-align: left; border: 3px solid #FBE3A1; background: #fff; transition: background .2s, border-color .2s; }
+.sterrij { display: flex; flex-wrap: wrap; gap: 4px; }
+.ster-wacht svg path { stroke: var(--orange-bd); stroke-dasharray: 3 2; }
+.mcard.gekozen { border-color: var(--green-bd); background: var(--green-bg); }
+
 /* Thema's in de kind-app */
 .saldo { position: relative; overflow: hidden; }
 .saldo > :not(.saldo-deco) { position: relative; z-index: 1; }
@@ -292,6 +302,7 @@ body.echt .phone { background: var(--soft); }
   .t-right { overflow: visible; padding-right: 0; }
 }
 @media (max-width: 720px) {
+  .tgrid { grid-template-columns: minmax(0, 1fr); }
   .stage { padding: 16px 12px 32px; }
   .bar { padding: 10px 16px; }
   .rgrid, .mgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
