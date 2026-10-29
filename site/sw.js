@@ -4,7 +4,7 @@
  * zonder internet wordt de laatst bewaarde versie getoond. api.php gaat nooit via de cache.
  * Toont ook de pushmeldingen ("Tijd is om") die de server stuurt.
  */
-const CACHE = "muntjes-v1";
+const CACHE = "muntjes-v2";
 const SHELL = ["./", "style.css", "app.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
@@ -31,8 +31,9 @@ self.addEventListener("fetch", e => {
   }
   if (url.origin !== location.origin) return;
 
-  // Eigen bestanden: eerst de server, bij geen internet de bewaarde versie
-  e.respondWith(fetch(req).then(res => {
+  // Eigen bestanden: eerst de server, bij geen internet de bewaarde versie.
+  // "no-cache": altijd bij de server navragen, anders houdt de browser een oude versie soms nog een uur vast.
+  e.respondWith(fetch(req, { cache: "no-cache" }).then(res => {
     if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
     return res;
   }).catch(() => caches.match(req).then(hit => hit || caches.match("./"))));
