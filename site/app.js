@@ -408,7 +408,40 @@ async function start() {
   }
   geladen = true;
   if (rol === 'ouder' && s.scherm === 'beheer') laadBeheer();
+  if (volwassene()) {
+    if (PARAMS.get('scherm') === 'timers') s = { ...s, scherm: 'timers' };
+    laadPush();
+  }
   render();
+}
+
+// ---------- meldingen op de telefoon (Web Push) ----------
+// Stand: 'aan', 'uit', 'geen' (browser kan het niet), 'ios' (eerst op beginscherm zetten),
+// 'geblokkeerd' (meldingen geweigerd in de browser) of 'bezig'.
+let pushStand = null;
+const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const losseApp = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const pushKan = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+async function laadPush() {
+  if (DEMO) return;
+  if (!pushKan()) { pushStand = isIos() && !losseApp() ? 'ios' : 'geen'; render(); return; }
+  if (Notification.permission === 'denied') { pushStand = 'geblokkeerd'; render(); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const abo = await reg.pushManager.getSubscription();
+    pushStand = abo && Notification.permission === 'granted' ? 'aan' : 'uit';
+    // Server bijwerken (bijv. als nu iemand anders op deze telefoon is ingelogd).
+    if (pushStand === 'aan') { const j = abo.toJSON(); api('push_aan', { endpoint: j.endpoint, keys: j.keys }); }
+  } catch (e) {
+    pushStand = 'geen';
+  }
+  render();
+}
+
+function sleutelBytes(b64) {
+  const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
 }
 
 async function laadBeheer() {
@@ -614,8 +647,10 @@ const acties = {
         .map((t) => {
           if (t.id !== d.id) return t;
           const rest = timerRest(t);
-          if (d.x === 'start') return { ...t, status: 'loopt', eind: nu + (rest * 1000) / f };
-          if (d.x === 'pauze') return t.status === 'loopt' ? { ...t, status: 'pauze', rest, eind: null } : { ...t, status: 'loopt', eind: nu + (rest * 1000) / f };
+          // Wie de timer startte krijgt ook de melding "Tijd is om" (ouders altijd).
+          const door = !DEMO && ik ? { startDoor: ik.id } : {};
+          if (d.x === 'start') return { ...t, ...door, status: 'loopt', eind: nu + (rest * 1000) / f };
+          if (d.x === 'pauze') return t.status === 'loopt' ? { ...t, status: 'pauze', rest, eind: null } : { ...t, ...door, status: 'loopt', eind: nu + (rest * 1000) / f };
           if (d.x === 'plus') {
             return t.status === 'loopt'
               ? { ...t, totaal: t.totaal + 300, eind: Math.max(t.eind, nu) + 300000 / f }
@@ -707,6 +742,48 @@ const acties = {
     else if (e.soort === 'taak') zet((st) => ({ taken: st.taken.filter((t) => t.id !== e.id), edit: null }));
     else zet((st) => ({ beloningen: st.beloningen.filter((b) => b.id !== e.id), edit: null }));
     melding('Verwijderd: ' + e.naam);
+  },
+
+  async pushToggle() {
+    if (DEMO || pushStand === 'bezig' || !pushKan()) return;
+    const was = pushStand;
+    pushStand = 'bezig';
+    render();
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const oud = await reg.pushManager.getSubscription();
+      if (was === 'aan') {
+        if (oud) { await api('push_uit', { endpoint: oud.endpoint }); await oud.unsubscribe(); }
+        pushStand = 'uit';
+        melding('Meldingen staan uit op deze telefoon');
+      } else {
+        const toestemming = await Notification.requestPermission();
+        if (toestemming !== 'granted') {
+          pushStand = toestemming === 'denied' ? 'geblokkeerd' : 'uit';
+          melding('Geen toestemming voor meldingen');
+          return;
+        }
+        const r = await api('push_sleutel');
+        if (!r.ok) throw new Error(r.data.fout || 'Geen verbinding met de server.');
+        if (oud) await oud.unsubscribe();
+        const abo = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: sleutelBytes(r.data.sleutel) });
+        const j = abo.toJSON();
+        const a = await api('push_aan', { endpoint: j.endpoint, keys: j.keys });
+        if (!a.ok) { await abo.unsubscribe(); throw new Error(a.data.fout || 'Geen verbinding met de server.'); }
+        pushStand = 'aan';
+        melding('Meldingen staan aan op deze telefoon');
+      }
+    } catch (e) {
+      pushStand = was;
+      melding('Lukt niet: ' + (e.message || 'onbekende fout'));
+    } finally {
+      if (pushStand === 'bezig') pushStand = was;
+      render();
+    }
+  },
+  async pushTest() {
+    const r = await api('push_test', {});
+    melding(r.ok ? 'Testmelding verstuurd' : r.data.fout || 'Geen verbinding met de server.');
   },
 
   // Inloggen, tablet koppelen en pincode (echte app)
@@ -840,6 +917,31 @@ function overigInfo() {
   const aantal = Math.max(isMin && max === 0 ? 0 : 1, Math.min(s.ovAmt, max));
   const uit = !s.ovReden.trim() || aantal < 1;
   return { kind, isMin, max, aantal, uit };
+}
+
+// Regel in Beheer/Account: meldingen aan of uit op deze telefoon.
+function pushBlok() {
+  if (DEMO) {
+    return `<h2 class="sec">Meldingen</h2>
+    <div class="lijst"><div class="lrij"><span class="col"><span>Melding als een timer afloopt</span><small>Alleen in de echte app, op je eigen telefoon</small></span></div></div>`;
+  }
+  const uitleg = {
+    aan: 'Aan: ook als de app dicht is',
+    uit: 'Uit op deze telefoon',
+    bezig: 'Even bezig…',
+    geblokkeerd: 'Geblokkeerd: zet meldingen voor deze site aan in de instellingen van je browser',
+    ios: 'iPhone: zet de app eerst op je beginscherm (deelknop › Zet op beginscherm) en open hem daar',
+    geen: 'Deze browser kan geen meldingen ontvangen'
+  }[pushStand || 'bezig'];
+  const kan = ['aan', 'uit', 'bezig'].includes(pushStand);
+  return `<h2 class="sec">Meldingen</h2>
+    <div class="lijst">
+      <button type="button" class="lrij" data-a="pushToggle" aria-pressed="${pushStand === 'aan'}" ${kan ? '' : 'disabled'}>
+        <span class="col"><span>Melding als een timer afloopt</span><small>${uitleg}</small></span>
+        ${kan ? `<span class="switch${pushStand === 'aan' ? ' on' : ''}"><span></span></span>` : ''}
+      </button>
+      ${pushStand === 'aan' ? '<button type="button" class="lrij" data-a="pushTest"><span class="grow">Testmelding sturen</span></button>' : ''}
+    </div>`;
 }
 
 // ---------- ouder-app ----------
@@ -992,6 +1094,7 @@ function schermAccount() {
     <div class="lijst">
       <button type="button" class="lrij" data-a="pinOpen"><span class="grow">Mijn pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>
     </div>
+    ${pushBlok()}
     <button type="button" class="btn btn-ink vol" data-a="vergrendel">${icon(IC.slot, 18, 2)} Uitloggen</button>`;
 }
 
@@ -1052,6 +1155,7 @@ function schermBeheer() {
         ? '<div class="lrij"><span class="grow">Pincode</span><span class="r">Alleen in de echte app</span></div>'
         : `<button type="button" class="lrij" data-a="pinOpen"><span class="grow">Mijn pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>`}
     </div>
+    ${pushBlok()}
     ${DEMO ? '' : `
     <h2 class="sec">Gebruikers</h2>
     <p class="sec-sub">Iedereen logt in met een eigen pincode. Ouders mogen alles; familie mag klusjes melden, muntjes geven en aanvragen goedkeuren.</p>
@@ -1776,7 +1880,12 @@ if (!DEMO) {
   // Wijzigingen van het andere apparaat ophalen (alleen als de app in beeld is).
   setInterval(() => { if (document.visibilityState === 'visible') haal(); }, 4000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') haal(); });
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.scherm && volwassene()) zet({ scherm: e.data.scherm, sheet: null });
+    });
+  }
 }
 
 render();

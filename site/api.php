@@ -13,6 +13,8 @@
  *         Een tablet mag alleen aanvragen/meldingen voor zijn eigen kind toevoegen of intrekken.
  * Widget: de Android-widget heeft een eigen sleutel (header X-Widget) die alleen het saldo
  *         van één kind mag lezen. Na een wijziging stuurt de server een pushbericht (Firebase).
+ * Meldingen: telefoons van ouders/familie kunnen zich aanmelden voor Web Push ("Tijd is om").
+ *         timers.php (apart proces op de server) laadt dit bestand zonder te antwoorden.
  */
 declare(strict_types=1);
 date_default_timezone_set('Europe/Amsterdam');   // weken en dagen zoals in de app
@@ -27,6 +29,11 @@ $lifetime = SESSIE_DAGEN * 86400;
 ini_set('session.gc_maxlifetime', (string)$lifetime);
 if (!is_dir(__DIR__ . '/data/sessions')) @mkdir(__DIR__ . '/data/sessions', 0750, true);
 ini_set('session.save_path', __DIR__ . '/data/sessions');
+define('MUNTJES', true);
+require __DIR__ . '/webpush.php';
+$cli = defined('MUNTJES_CLI');
+
+if (!$cli) {
 session_name('muntjes');
 session_set_cookie_params([
     'lifetime' => $lifetime,
@@ -40,6 +47,7 @@ session_start();
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
+}
 
 $transactie = false;
 
@@ -94,6 +102,15 @@ try {
         pin_hash TEXT NOT NULL,
         aangemaakt INTEGER NOT NULL
     )');
+    $db->exec('CREATE TABLE IF NOT EXISTS push (
+        id INTEGER PRIMARY KEY,
+        gebruiker INTEGER NOT NULL,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        aangemaakt INTEGER NOT NULL,
+        laatst INTEGER NOT NULL DEFAULT 0
+    )');
 } catch (Throwable $e) {
     fail('De database werkt niet op deze server. Controleer of PHP de map data/ mag beschrijven en of SQLite aan staat.', 500);
 }
@@ -125,7 +142,7 @@ if ((int)$db->query('SELECT COUNT(*) FROM gebruikers')->fetchColumn() === 0) {
 $actie = $_GET['actie'] ?? '';
 $raw = '';
 $in = [];
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     // Alleen JSON accepteren: dat kan een andere website niet stiekem namens jou versturen.
     if (stripos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== 0) fail('Verkeerd soort verzoek.', 415);
     $raw = (string)file_get_contents('php://input', false, null, 0, MAX_BYTES + 1);
@@ -532,6 +549,7 @@ function aantal_ouders(int $behalve = 0): int {
 }
 
 /* ---- acties ---- */
+if ($cli) return;   // timers.php gebruikt alleen de functies
 switch ($actie) {
     case 'status': {
         $w = wie();
@@ -710,6 +728,7 @@ switch ($actie) {
         $id = (int)($in['id'] ?? 0);
         if (aantal_ouders($id) === 0) fail('Er moet altijd minstens één ouder zijn.');
         $db->prepare('DELETE FROM gebruikers WHERE id = ?')->execute([$id]);
+        $db->prepare('DELETE FROM push WHERE gebruiker = ?')->execute([$id]);
         out(['gebruikers' => gebruikers_lijst()]);
     }
 
@@ -766,6 +785,42 @@ switch ($actie) {
         $w = widget_wie();
         if ($w) $db->prepare('DELETE FROM widgets WHERE id = ?')->execute([$w['id']]);
         out(['ok' => true]);
+    }
+
+    // Meldingen op deze telefoon (Web Push)
+    case 'push_sleutel': {
+        need_volwassene();
+        out(['sleutel' => vapid()['publiek']]);
+    }
+
+    case 'push_aan': {
+        need_post();
+        $w = need_volwassene();
+        $endpoint = (string)($in['endpoint'] ?? '');
+        $p256dh = (string)($in['keys']['p256dh'] ?? '');
+        $auth = (string)($in['keys']['auth'] ?? '');
+        if (strlen($endpoint) > 1000 || !push_adres_ok($endpoint) || strlen(b64url_dec($p256dh)) !== 65 || strlen(b64url_dec($auth)) !== 16) {
+            fail('Deze browser geeft geen bruikbaar meldingsadres.');
+        }
+        $db->prepare('INSERT INTO push (gebruiker, endpoint, p256dh, auth, aangemaakt) VALUES (?, ?, ?, ?, ?)
+                      ON CONFLICT(endpoint) DO UPDATE SET gebruiker = excluded.gebruiker, p256dh = excluded.p256dh, auth = excluded.auth')
+           ->execute([$w['id'], $endpoint, $p256dh, $auth, time()]);
+        out(['ok' => true]);
+    }
+
+    case 'push_uit': {
+        need_post();
+        $w = need_volwassene();
+        $db->prepare('DELETE FROM push WHERE endpoint = ? AND gebruiker = ?')->execute([(string)($in['endpoint'] ?? ''), $w['id']]);
+        out(['ok' => true]);
+    }
+
+    case 'push_test': {
+        need_post();
+        $w = need_volwassene();
+        $n = push_naar([$w['id']], ['titel' => 'Muntjes', 'tekst' => 'Meldingen staan aan. Zo ziet "Tijd is om" eruit.', 'tag' => 'test']);
+        if (!$n) fail('Er kwam geen melding aan. Zet de meldingen uit en weer aan.', 502);
+        out(['ok' => true, 'aantal' => $n]);
     }
 
     default:

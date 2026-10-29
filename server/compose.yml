@@ -2,6 +2,7 @@
 # Bestanden in /srv/web/sites/muntjes (gedeployed vanuit GitHub), database + logins in ./data.
 # De data-map is alleen voor PHP zichtbaar. De startpincode staat in .env (START_PIN).
 # firebase.json = geheime sleutel om pushberichten naar de widget te sturen (niet in GitHub).
+# timers = apart proces voor de meldingen "Tijd is om" (Web Push); de VAPID-sleutel staat in de database.
 services:
   php:
     image: php:8.4-fpm-alpine
@@ -16,6 +17,18 @@ services:
       - ./firebase.json:/run/secrets/firebase.json:ro
     networks:
       - web
+
+  # Kijkt elke 15 seconden of er een timer om is en stuurt dan "Tijd is om" naar de telefoons.
+  # Draait als www-data (uid 82), net als PHP, zodat de database van dezelfde eigenaar blijft.
+  timers:
+    image: php:8.4-fpm-alpine
+    restart: unless-stopped
+    user: "82:82"
+    command: ["sh", "-c", "while true; do php /srv/sites/muntjes/timers.php; sleep 15; done"]
+    volumes:
+      - /srv/web/sites/muntjes:/srv/sites/muntjes:ro
+      - ./data:/srv/sites/muntjes/data
+      - ./php.ini:/usr/local/etc/php/conf.d/muntjes.ini:ro
 
 networks:
   web:
