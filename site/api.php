@@ -247,15 +247,21 @@ function gelijk($a, $b): bool {
 // Wat mag een tablet veranderen? Alleen voor zijn eigen kind: een aanvraag of melding toevoegen,
 // een eigen openstaande aanvraag intrekken, een eigen regel als "gezien" markeren, of de
 // klaarstaande timer van een eigen spelletje-beloning starten (bij "Speel nu").
+// Welke controle een tablet weigert, voor de serverlog (alleen namen en id's, geen inhoud).
+function waarom(string $wat, string $msg): string {
+    error_log('muntjes tablet geweigerd: ' . preg_replace('/[^\w .:-]/u', '', $wat));
+    return $msg;
+}
+
 function kind_fout(array $oud, array $nieuw, string $kid): ?string {
     $nee = 'Dit mag alleen papa of mama aanpassen.';
     foreach (array_unique(array_merge(array_keys($oud), array_keys($nieuw))) as $k) {
         if ($k === 'tx' || $k === 'nextId' || $k === 'focus' || $k === 'timers') continue;
-        if (!gelijk($oud[$k] ?? null, $nieuw[$k] ?? null)) return $nee;
+        if (!gelijk($oud[$k] ?? null, $nieuw[$k] ?? null)) return waarom('sleutel '.$k, $nee);
     }
     $to = array_values(is_array($oud['timers'] ?? null) ? $oud['timers'] : []);
     $tn = array_values(is_array($nieuw['timers'] ?? null) ? $nieuw['timers'] : []);
-    if (count($to) !== count($tn)) return $nee;
+    if (count($to) !== count($tn)) return waarom('aantal timers', $nee);
     $belSpel = array_column($oud['beloningen'] ?? [], null, 'id');
     foreach ($to as $i => $t) {
         if (gelijk($t, $tn[$i])) continue;
@@ -267,42 +273,42 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
         $spel = (string)($belSpel[(string)($t['ref'] ?? '')]['spel'] ?? '');
         if (!gelijk($a, $b) || ($t['kid'] ?? '') !== $kid || ($t['status'] ?? '') !== 'wacht' || $spel === ''
             || ($tn[$i]['status'] ?? '') !== 'loopt' || !is_numeric($eind)
-            || $eind < $nuMs || $eind > $nuMs + ((float)($t['rest'] ?? 0) + 120) * 1000) return $nee;
+            || $eind < $nuMs || $eind > $nuMs + ((float)($t['rest'] ?? 0) + 120) * 1000) return waarom('timer '.($t['id'] ?? '?'), $nee);
     }
-    if ((int)($nieuw['nextId'] ?? 0) < (int)($oud['nextId'] ?? 0)) return $nee;
+    if ((int)($nieuw['nextId'] ?? 0) < (int)($oud['nextId'] ?? 0)) return waarom('nextId', $nee);
 
     // Weekfocus: alleen die van het eigen kind, met bestaande taken en niet meer dan toegestaan.
     $fo = is_array($oud['focus'] ?? null) ? $oud['focus'] : [];
     $fn = is_array($nieuw['focus'] ?? null) ? $nieuw['focus'] : [];
     foreach (array_unique(array_merge(array_keys($fo), array_keys($fn))) as $k) {
-        if ((string)$k !== $kid && !gelijk($fo[$k] ?? null, $fn[$k] ?? null)) return $nee;
+        if ((string)$k !== $kid && !gelijk($fo[$k] ?? null, $fn[$k] ?? null)) return waarom('focus ander kind', $nee);
     }
     if (isset($fn[$kid])) {
         $ids = $fn[$kid]['ids'] ?? null;
         $takenIds = array_column($oud['taken'] ?? [], 'id');
-        if (!is_array($ids) || count($ids) > (int)($oud['maxFocus'] ?? 3) || !is_int($fn[$kid]['week'] ?? null)) return $nee;
-        foreach ($ids as $id) if (!in_array($id, $takenIds, true)) return $nee;
+        if (!is_array($ids) || count($ids) > (int)($oud['maxFocus'] ?? 3) || !is_int($fn[$kid]['week'] ?? null)) return waarom('focus vorm', $nee);
+        foreach ($ids as $id) if (!in_array($id, $takenIds, true)) return waarom('focus taak '.$id, $nee);
     }
 
     $o = [];
     foreach ($oud['tx'] ?? [] as $t) if (is_array($t) && isset($t['id'])) $o[(string)$t['id']] = $t;
     $n = [];
     foreach ($nieuw['tx'] ?? [] as $t) {
-        if (!is_array($t) || !isset($t['id'])) return $nee;
+        if (!is_array($t) || !isset($t['id'])) return waarom('tx zonder id', $nee);
         $n[(string)$t['id']] = $t;
     }
     $eigenOpen = fn(array $t): bool => ($t['kid'] ?? '') === $kid && ($t['bron'] ?? '') === 'kind' && ($t['status'] ?? '') === 'aangevraagd';
 
     foreach ($o as $id => $t) {
         if (!isset($n[$id])) {
-            if (!$eigenOpen($t)) return $nee;
+            if (!$eigenOpen($t)) return waarom('tx weg '.$id, $nee);
             continue;
         }
         if (gelijk($t, $n[$id])) continue;
         $a = $t;
         $b = $n[$id];
         unset($a['gezien'], $b['gezien']);
-        if (!gelijk($a, $b) || ($t['kid'] ?? '') !== $kid || ($n[$id]['gezien'] ?? false) !== true) return $nee;
+        if (!gelijk($a, $b) || ($t['kid'] ?? '') !== $kid || ($n[$id]['gezien'] ?? false) !== true) return waarom('tx gewijzigd '.$id, $nee);
     }
 
     $klusjes = array_column($oud['klusjes'] ?? [], null, 'id');
@@ -310,7 +316,7 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
     $taken = array_column($oud['taken'] ?? [], null, 'id');
     foreach ($n as $id => $t) {
         if (isset($o[$id])) continue;
-        if (!$eigenOpen($t)) return $nee;
+        if (!$eigenOpen($t)) return waarom('nieuwe tx niet eigen '.$id, $nee);
         $ref = (string)($t['ref'] ?? '');
         $bedrag = $t['amount'] ?? null;
         if (($t['type'] ?? '') === 'klus') {
@@ -320,9 +326,9 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
         } elseif (($t['type'] ?? '') === 'beloning') {
             if (!isset($beloningen[$ref]) || $bedrag !== -$beloningen[$ref]['kosten']) return 'Onbekende beloning.';
         } else {
-            return $nee;
+            return waarom('nieuwe tx type '.($t['type'] ?? '?'), $nee);
         }
-        if (($t['msg'] ?? '') !== '' || !is_string($t['label'] ?? null) || mb_strlen($t['label']) > 60) return $nee;
+        if (($t['msg'] ?? '') !== '' || !is_string($t['label'] ?? null) || mb_strlen($t['label']) > 60) return waarom('nieuwe tx label/msg '.$id, $nee);
     }
     return null;
 }
