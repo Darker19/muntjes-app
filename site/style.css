@@ -219,6 +219,7 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 .dim { opacity: .45; }
 .rtop { display: flex; align-items: flex-start; justify-content: space-between; width: 100%; gap: 8px; }
 .ricon { width: 64px; height: 64px; border-radius: 18px; background: #fff; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ricon .ill, .lico .ill { width: 100%; height: 100%; object-fit: contain; padding: 2px; }
 .rnaam { font-family: Fredoka, sans-serif; font-size: 22px; font-weight: 600; line-height: 1.2; }
 .coins { display: flex; gap: 4px; }
 .duur { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px 4px 8px; font-size: 14px; font-weight: 800; color: var(--muted2); }

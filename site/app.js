@@ -18,6 +18,7 @@ const IC = {
   tooth: 'M7.5 3C5 3 4 5 4 7c0 3 1.5 4 2 7s1 7 2.5 7 1.5-5 3.5-5 2 5 3.5 5 2-4 2.5-7 2-4 2-7c0-2-1-4-3.5-4-1.5 0-2.5 1-4.5 1S9 3 7.5 3z',
   shirt: 'M8 3 3 6l2 4 2-1v12h10V9l2 1 2-4-5-3a4 4 0 0 1-8 0z',
   blocks: 'M4 13h7v7H4zM13 13h7v7h-7zM8.5 4h7v7h-7z',
+  kamer: 'M3 10h18l-2 10H5zM7 10V6h4v4M14 10l1.5-5 3 1-1.2 4',
   bag: 'M5 8h14l-1 13H6L5 8zM9 8V6a3 3 0 0 1 6 0v2',
   paw: 'M12 13c-3 0-5 3-5 5.5 0 1.5 1.5 2 2.5 1.5s1.5-1 2.5-1 1.5.5 2.5 1 2.5 0 2.5-1.5c0-2.5-2-5.5-5-5.5zM3.5 10a1.5 2 0 1 0 3 0a1.5 2 0 1 0-3 0M7.5 5.5a1.5 2 0 1 0 3 0a1.5 2 0 1 0-3 0M13.5 5.5a1.5 2 0 1 0 3 0a1.5 2 0 1 0-3 0M17.5 10a1.5 2 0 1 0 3 0a1.5 2 0 1 0-3 0',
   tablet: 'M6 2h12a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2',
@@ -51,12 +52,17 @@ const KLEUREN = [
   ['#7A4FD0', '#F1ECFB'], ['#0F7C74', '#E4F3F1'], ['#2457C5', '#E8EFFB'], ['#C2410C', '#FCEDE5'],
   ['#B0306A', '#FAE8F0'], ['#4D7C0F', '#EEF5E4'], ['#1D2733', '#ECEFF3']
 ];
-const ICOON_KEUZE = ['plate', 'table', 'bed', 'tooth', 'shirt', 'blocks', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star'];
+const ICOON_KEUZE = ['plate', 'table', 'kamer', 'bed', 'tooth', 'shirt', 'blocks', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star'];
 const DUREN = [0, 5, 10, 15, 20, 30, 45, 60];
 const THEMAS = [['geen', 'Standaard'], ['eenhoorn', 'Eenhoorns'], ['dino', 'Dinosaurussen']];
 // Spelletjes die een beloning direct kan openen.
 const SPELLEN = [['', 'Geen'], ['https://spelletjes.darkesttimes.nl/', 'Flesjes Sorteren']];
 const spelNaam = (url) => (SPELLEN.find(([u]) => u === url) || [url, 'Spelletje'])[1];
+
+// Getekende plaatjes voor de kind-app, per thema. Iconen zonder plaatje blijven een lijnicoon.
+const PLAATJES = { plate: 'tafel-dekken', table: 'tafel-afruimen', kamer: 'kamer-opruimen', tooth: 'tanden-poetsen', tablet: 'tablet', game: 'spelletje' };
+const PLAATJE_MAP = { geen: 'neutral', eenhoorn: 'unicorn', dino: 'dinosaurus' };
+const plaatje = (d, thema, size, sw) => (PLAATJES[d] ? `<img class="ill" src="img/${PLAATJE_MAP[thema] || 'neutral'}/${PLAATJES[d]}.webp" width="${size}" height="${size}" alt="">` : icon(d, size, sw));
 
 // Mascottes voor de kind-app, per thema.
 const MASCOTTE = {
@@ -160,7 +166,7 @@ function beginState() {
     klusjes: [
       { id: 'k1', naam: 'Tafel dekken', icon: 'plate', waarde: 1, keer: 1, per: 'dag' },
       { id: 'k2', naam: 'Tafel afruimen', icon: 'table', waarde: 1, keer: 1, per: 'dag' },
-      { id: 'k3', naam: 'Kamer opruimen', icon: 'bed', waarde: 1, keer: 1, per: 'dag' },
+      { id: 'k3', naam: 'Kamer opruimen', icon: 'kamer', waarde: 1, keer: 1, per: 'dag' },
       { id: 'k4', naam: 'Tanden poetsen zonder zeuren', icon: 'tooth', waarde: 1, keer: 1, per: 'dag' },
       { id: 'k5', naam: 'Aankleden', icon: 'shirt', waarde: 1, keer: 1, per: 'dag' },
       { id: 'k6', naam: 'Speelgoed opruimen', icon: 'blocks', waarde: 1, keer: 1, per: 'dag' },
@@ -234,7 +240,8 @@ function zonderTijdInNaam(st) {
 function metHoeVaak(st) {
   return {
     ...st,
-    klusjes: st.klusjes.map((k) => ({ keer: 1, per: 'dag', ...k })),
+    // Kamer opruimen deelde het bed-icoon met Bed opmaken en heeft nu een eigen plaatje.
+    klusjes: st.klusjes.map((k) => ({ keer: 1, per: 'dag', ...k, ...(k.id === 'k3' && k.icon === 'bed' ? { icon: 'kamer' } : {}) })),
     beloningen: [...st.beloningen.map((b) => ({ keer: 1, per: 'week', ...b })),
       ...(st.spelErbij || st.beloningen.some((b) => b.spel) ? [] : [beginState().beloningen.find((b) => b.spel)])],
     spelErbij: true,
@@ -1621,7 +1628,7 @@ function renderKind() {
       + (t.beslistDoor && t.status !== 'aangevraagd' ? (t.status === 'goed' ? ', goedgekeurd door ' : ', afgewezen door ') + t.beslistDoor : '');
     const status = t.status === 'aangevraagd' ? (t.amount < 0 ? 'gereserveerd' : 'wacht op goedkeuring') : t.status === 'afgewezen' ? (t.amount < 0 ? 'afgewezen, terug' : 'niet goedgekeurd') : '';
     return `<div class="lrow${rij}">
-      <span class="lico">${icon(ic, 24)}</span>
+      <span class="lico">${plaatje(ic, thema, 24)}</span>
       <div class="ltxt">
         <b>${esc(t.label)}</b>
         <span class="muted">${door} · ${tijdLabel(t.ts)}</span>
@@ -1639,7 +1646,7 @@ function renderKind() {
     if (speelbaar) {
       return `<button type="button" class="rcard s-goed speel" data-a="spelen" data-id="${b.id}">
         <span class="rtop">
-          <span class="ricon">${icon(b.icon, 38, 1.5)}</span>
+          <span class="ricon">${plaatje(b.icon, thema, 38, 1.5)}</span>
           <span class="chip c-goed">${icon(IC.vink, 14, 3)}Goedgekeurd</span>
         </span>
         <span class="rnaam">${b.naam}</span>
@@ -1655,7 +1662,7 @@ function renderKind() {
     const voet = b.spel && b.duur && (status === 'goed' || status === 'op') ? 'Speeltijd is om' : status === 'op' ? (b.per === 'dag' ? 'Vandaag op, morgen weer' : 'Deze week op') : info.voet;
     return `<button type="button" class="rcard s-${status}${tekort ? ' dim' : ''}" data-a="beloning" data-id="${b.id}">
       <span class="rtop">
-        <span class="ricon">${icon(b.icon, 38, 1.5)}</span>
+        <span class="ricon">${plaatje(b.icon, thema, 38, 1.5)}</span>
         ${info.chip ? `<span class="chip c-${status}">${icon(CHIP_ICOON[status], 14, 3)}${info.chip}</span>` : ''}
       </span>
       <span class="rnaam">${b.naam}</span>
@@ -1685,7 +1692,7 @@ function renderKind() {
         : open ? 'Gemeld, papa of mama kijkt ernaar'
         : s.kindMelden[kind.id] ? 'Gedaan? Tik hier!' : 'Papa of mama geeft je een ster';
       return `<button type="button" class="tkaart${klaar ? ' s-goed' : open ? ' s-aangevraagd' : ''}" data-a="taakMeld" data-id="${id}">
-        <span class="rtop"><span class="ricon">${icon(taak.icon, 34, 1.5)}</span>${klaar ? '<span class="chip c-goed">Voltooid</span>' : open ? '<span class="chip c-aangevraagd">Gemeld</span>' : ''}</span>
+        <span class="rtop"><span class="ricon">${plaatje(taak.icon, thema, 34, 1.5)}</span>${klaar ? '<span class="chip c-goed">Voltooid</span>' : open ? '<span class="chip c-aangevraagd">Gemeld</span>' : ''}</span>
         <span class="rnaam">${taak.naam}</span>
         <span class="sterrij" role="img" aria-label="${n} van ${taak.doel} sterren">${rij}</span>
         <span class="voet">${tekst}</span>
@@ -1696,7 +1703,7 @@ function renderKind() {
       const vast = gekozen && sterTx(kind.id, taak.id).length > 0;
       const vol = !gekozen && focus.length >= maxF;
       return `<button type="button" class="mcard${gekozen ? ' gekozen' : ''}${vol ? ' dim' : ''}" data-a="focusKies" data-id="${taak.id}" aria-pressed="${gekozen}">
-        <span class="ricon">${icon(taak.icon, 30, 1.5)}</span>
+        <span class="ricon">${plaatje(taak.icon, thema, 30, 1.5)}</span>
         <span class="mnaam">${taak.naam}</span>
         <span class="chip ${gekozen ? 'c-goed' : 'c-vrij'}">${gekozen ? (vast ? 'Bezig' : 'Gekozen ✓') : taak.doel + ' ⭐ = +' + taak.beloning}</span>
       </button>`;
@@ -1725,7 +1732,7 @@ function renderKind() {
             ? `<span class="chip c-vol">${k.per === 'dag' ? 'Vandaag gedaan' : 'Deze week gedaan'}</span>`
             : `<span class="chip ${vol ? 'c-vol' : 'c-vrij'}">${vol ? 'Weeklimiet bereikt' : '+' + k.waarde + ' ' + v.woord(k.waarde)}</span>`;
         return `<button type="button" class="mcard s-${status}${vol || klaar ? ' dim' : ''}" data-a="meld" data-id="${k.id}">
-          <span class="ricon">${icon(k.icon, 30, 1.5)}</span>
+          <span class="ricon">${plaatje(k.icon, thema, 30, 1.5)}</span>
           <span class="mnaam">${k.naam}</span>
           ${chip}
           <span class="muted">${perTekst(k)}</span>
@@ -1829,7 +1836,7 @@ function volgendFeest() {
       <span class="feest-beeld">${isSter ? ster(110) : thema !== 'geen' ? MASCOTTE[thema](120) : coin(110)}</span>
       <span class="feest-titel" style="color:${{ eenhoorn: '#7C3AED', dino: '#3F6212' }[thema] || kind.kleur}">Hoera, ${esc(kind.naam)}!</span>
       <span class="feest-tekst">${taak ? 'Je hebt een taak voltooid!' : isSter ? 'Je hebt een ster verdiend!' : 'Je hebt een klusje geklaard!'}</span>
-      <span class="feest-wat">${act ? `<span class="ricon">${icon(act.icon, 34, 1.5)}</span>` : ''}${esc(taak ? (act ? act.naam : t.label) : t.label)}</span>
+      <span class="feest-wat">${act ? `<span class="ricon">${plaatje(act.icon, thema, 34, 1.5)}</span>` : ''}${esc(taak ? (act ? act.naam : t.label) : t.label)}</span>
       <span class="feest-munt">${beloond}</span>
     </button>`;
   el.hidden = false;
