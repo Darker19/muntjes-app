@@ -244,15 +244,15 @@ function gelijk($a, $b): bool {
     return json_encode(canon($a)) === json_encode(canon($b));
 }
 
-// Wat mag een tablet veranderen? Alleen voor zijn eigen kind: een aanvraag of melding toevoegen,
-// een eigen openstaande aanvraag intrekken, een eigen regel als "gezien" markeren, of de
-// klaarstaande timer van een eigen spelletje-beloning starten (bij "Speel nu").
 // Welke controle een tablet weigert, voor de serverlog (alleen namen en id's, geen inhoud).
 function waarom(string $wat, string $msg): string {
     error_log('muntjes tablet geweigerd: ' . preg_replace('/[^\w .:-]/u', '', $wat));
     return $msg;
 }
 
+// Wat mag een tablet veranderen? Alleen voor zijn eigen kind: een aanvraag of melding toevoegen,
+// een eigen openstaande aanvraag intrekken, een eigen regel als "gezien" markeren, of de
+// klaarstaande timer van een eigen spelletje-beloning starten (bij "Speel nu").
 function kind_fout(array $oud, array $nieuw, string $kid): ?string {
     $nee = 'Dit mag alleen papa of mama aanpassen.';
     foreach (array_unique(array_merge(array_keys($oud), array_keys($nieuw))) as $k) {
@@ -273,7 +273,7 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
         $spel = (string)($belSpel[(string)($t['ref'] ?? '')]['spel'] ?? '');
         if (!gelijk($a, $b) || ($t['kid'] ?? '') !== $kid || ($t['status'] ?? '') !== 'wacht' || $spel === ''
             || ($tn[$i]['status'] ?? '') !== 'loopt' || !is_numeric($eind)
-            || $eind < $nuMs || $eind > $nuMs + ((float)($t['rest'] ?? 0) + 120) * 1000) return waarom('timer '.($t['id'] ?? '?'), $nee);
+            || $eind < $nuMs - 600000 || $eind > $nuMs + ((float)($t['rest'] ?? 0) + 600) * 1000) return waarom('timer '.($t['id'] ?? '?'), $nee);
     }
     if ((int)($nieuw['nextId'] ?? 0) < (int)($oud['nextId'] ?? 0)) return waarom('nextId', $nee);
 
@@ -290,7 +290,7 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
         $week = $fn[$kid]['week'] ?? null;
         $takenIds = array_column($oud['taken'] ?? [], 'id');
         if (!is_array($ids)) return waarom('focus ids', $nee);
-        if (count($ids) > (int)($oud['maxFocus'] ?? 3) && count($ids) > count($fo[$kid]['ids'] ?? [])) return waarom('focus te veel ' . count($ids), $nee);
+        if (count($ids) > ((int)($oud['maxFocus'] ?? 0) ?: 3) && count($ids) > count($fo[$kid]['ids'] ?? [])) return waarom('focus te veel ' . count($ids), $nee);
         if (!is_numeric($week) || floor((float)$week) != $week) return waarom('focus week ' . gettype($week), $nee);
         foreach ($ids as $id) if (!in_array($id, $takenIds, true)) return waarom('focus taak '.$id, $nee);
     }
