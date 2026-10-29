@@ -243,12 +243,29 @@ function gelijk($a, $b): bool {
 }
 
 // Wat mag een tablet veranderen? Alleen voor zijn eigen kind: een aanvraag of melding toevoegen,
-// een eigen openstaande aanvraag intrekken, of een eigen regel als "gezien" markeren.
+// een eigen openstaande aanvraag intrekken, een eigen regel als "gezien" markeren, of de
+// klaarstaande timer van een eigen spelletje-beloning starten (bij "Speel nu").
 function kind_fout(array $oud, array $nieuw, string $kid): ?string {
     $nee = 'Dit mag alleen papa of mama aanpassen.';
     foreach (array_unique(array_merge(array_keys($oud), array_keys($nieuw))) as $k) {
-        if ($k === 'tx' || $k === 'nextId' || $k === 'focus') continue;
+        if ($k === 'tx' || $k === 'nextId' || $k === 'focus' || $k === 'timers') continue;
         if (!gelijk($oud[$k] ?? null, $nieuw[$k] ?? null)) return $nee;
+    }
+    $to = array_values(is_array($oud['timers'] ?? null) ? $oud['timers'] : []);
+    $tn = array_values(is_array($nieuw['timers'] ?? null) ? $nieuw['timers'] : []);
+    if (count($to) !== count($tn)) return $nee;
+    $belSpel = array_column($oud['beloningen'] ?? [], null, 'id');
+    foreach ($to as $i => $t) {
+        if (gelijk($t, $tn[$i])) continue;
+        $a = $t;
+        $b = $tn[$i];
+        unset($a['status'], $a['eind'], $b['status'], $b['eind']);
+        $nuMs = time() * 1000;
+        $eind = $tn[$i]['eind'] ?? null;
+        $spel = (string)($belSpel[(string)($t['ref'] ?? '')]['spel'] ?? '');
+        if (!gelijk($a, $b) || ($t['kid'] ?? '') !== $kid || ($t['status'] ?? '') !== 'wacht' || $spel === ''
+            || ($tn[$i]['status'] ?? '') !== 'loopt' || !is_numeric($eind)
+            || $eind < $nuMs || $eind > $nuMs + ((float)($t['rest'] ?? 0) + 120) * 1000) return $nee;
     }
     if ((int)($nieuw['nextId'] ?? 0) < (int)($oud['nextId'] ?? 0)) return $nee;
 

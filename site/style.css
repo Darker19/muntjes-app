@@ -294,6 +294,56 @@ body.echt .phone { background: var(--soft); }
 .thema-knop.on { border-color: var(--ink); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--ink); }
 .thema-leeg { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
 
+/* Status-symbolen op de chips */
+.chip { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Beloning die een spelletje opent */
+.speel-knop { margin-top: auto; align-self: stretch; min-height: 56px; border-radius: 16px; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; gap: 10px; font-family: Fredoka, sans-serif; font-size: 24px; font-weight: 600; box-shadow: 0 4px 0 #17573A; }
+.speel-knop svg { fill: #fff; }
+.rcard.speel:active .speel-knop { transform: translateY(3px); box-shadow: 0 1px 0 #17573A; }
+
+/* Grote plaatjes: voor kinderen die nog niet lezen */
+.tablet.groot .rcard { align-items: center; text-align: center; gap: 10px; }
+.tablet.groot .rcard .rtop { flex-direction: column-reverse; align-items: center; }
+.tablet.groot .rcard .ricon { width: 132px; height: 132px; border-radius: 32px; color: var(--t-accent, var(--accent)); }
+.tablet.groot .rcard .ricon svg { width: 96px; height: 96px; }
+.tablet.groot .rcard .rnaam { font-size: 17px; color: var(--muted2); }
+.tablet.groot .rcard .badges { justify-content: center; }
+.tablet.groot .rcard .coins svg { width: 40px; height: 40px; }
+.tablet.groot .rcard .voet { font-size: 13px; margin-top: 0; }
+.tablet.groot .rcard .chip { font-size: 14px; padding: 6px 12px; }
+.tablet.groot .rcard .chip svg { width: 20px; height: 20px; }
+.tablet.groot .mgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tablet.groot .mcard { min-height: 200px; }
+.tablet.groot .mcard .ricon { width: 112px; height: 112px; border-radius: 28px; color: var(--t-accent, var(--accent)); }
+.tablet.groot .mcard .ricon svg { width: 80px; height: 80px; }
+.tablet.groot .mcard .mnaam { font-size: 13px; color: var(--muted2); }
+.tablet.groot .mcard .chip svg { width: 18px; height: 18px; }
+.tablet.groot .tkaart .ricon { width: 112px; height: 112px; border-radius: 28px; color: var(--t-accent, var(--accent)); }
+.tablet.groot .tkaart .ricon svg { width: 80px; height: 80px; }
+.tablet.groot .lico { width: 56px; height: 56px; border-radius: 16px; }
+.tablet.groot .lico svg { width: 38px; height: 38px; }
+
+/* Feestje: confetti en pop-up op de tablet */
+.tablet-wrap { position: relative; }
+.feest { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(29, 39, 51, .35); border-radius: 36px; overflow: hidden; animation: feest-in .25s ease-out; }
+body.bare .feest { border-radius: 0; }
+.confetti { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.feest-kaart { position: relative; z-index: 1; border: 0; background: #fff; border-radius: 32px; padding: 28px 40px 32px; display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: min(520px, 90%); box-shadow: 0 20px 60px rgba(0, 0, 0, .25); animation: feest-pop .5s cubic-bezier(.2, 1.6, .4, 1); }
+.feest-beeld { display: flex; animation: feest-hup 1s ease-in-out .4s 2; }
+.feest-titel { font-family: Fredoka, sans-serif; font-size: 40px; font-weight: 600; color: var(--accent); }
+.feest-tekst { font-size: 20px; font-weight: 800; color: var(--muted2); }
+.feest-wat { display: flex; align-items: center; gap: 12px; font-family: Fredoka, sans-serif; font-size: 22px; font-weight: 600; }
+.feest-wat .ricon { width: 56px; height: 56px; border-radius: 16px; }
+.feest-munt { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.feest-munt b { font-family: Fredoka, sans-serif; font-size: 28px; font-weight: 600; color: var(--green); margin-left: 8px; }
+@keyframes feest-in { from { opacity: 0; } }
+@keyframes feest-pop { from { transform: scale(.4); opacity: 0; } }
+@keyframes feest-hup { 50% { transform: translateY(-14px) rotate(-4deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .feest, .feest-kaart, .feest-beeld { animation: none; }
+}
+
 /* Kleinere schermen */
 @media (max-width: 1100px) {
   .tablet, body.bare .tablet { height: auto; }
@@ -302,6 +352,12 @@ body.echt .phone { background: var(--soft); }
   .t-right { overflow: visible; padding-right: 0; }
 }
 @media (max-width: 720px) {
+  .feest { border-radius: 24px; }
+  .feest-titel { font-size: 30px; }
+  .feest-kaart { padding: 22px 20px 24px; }
+  .tablet.groot .mgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tablet.groot .rcard .ricon { width: 104px; height: 104px; }
+  .tablet.groot .rcard .ricon svg { width: 76px; height: 76px; }
   .tgrid { grid-template-columns: minmax(0, 1fr); }
   .stage { padding: 16px 12px 32px; }
   .bar { padding: 10px 16px; }

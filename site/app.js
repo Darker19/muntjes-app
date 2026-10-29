@@ -40,7 +40,10 @@ const IC = {
   melden: 'M12 8v8M8 12h8M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0',
   inbox: 'M3 13h5l1.5 3h5l1.5-3h5M5 5h14l2 8v6H3v-6z',
   klok: 'M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0M12 7v5l3 2',
-  beheer: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4'
+  beheer: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
+  vink: 'M5 12.5l4.5 4.5L19 7.5',
+  kruis: 'M6 6l12 12M18 6L6 18',
+  speel: 'M8 5.5v13a.8.8 0 0 0 1.2.7l10.4-6.5a.8.8 0 0 0 0-1.4L9.2 4.8A.8.8 0 0 0 8 5.5z'
 };
 
 const OPSLAG = 'muntjes-preview-v2';
@@ -51,6 +54,9 @@ const KLEUREN = [
 const ICOON_KEUZE = ['plate', 'table', 'bed', 'tooth', 'shirt', 'blocks', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star'];
 const DUREN = [0, 5, 10, 15, 20, 30, 45, 60];
 const THEMAS = [['geen', 'Standaard'], ['eenhoorn', 'Eenhoorns'], ['dino', 'Dinosaurussen']];
+// Spelletjes die een beloning direct kan openen.
+const SPELLEN = [['', 'Geen'], ['https://spelletjes.darkesttimes.nl/', 'Flesjes Sorteren']];
+const spelNaam = (url) => (SPELLEN.find(([u]) => u === url) || [url, 'Spelletje'])[1];
 
 // Mascottes voor de kind-app, per thema.
 const MASCOTTE = {
@@ -149,7 +155,7 @@ function beginState() {
     v: 2,
     kids: [
       { id: 'noor', naam: 'Noor', kleur: '#7A4FD0', zacht: '#F1ECFB', thema: 'eenhoorn' },
-      { id: 'daan', naam: 'Daan', kleur: '#0F7C74', zacht: '#E4F3F1', thema: 'dino' }
+      { id: 'daan', naam: 'Daan', kleur: '#0F7C74', zacht: '#E4F3F1', thema: 'dino', groot: true }
     ],
     klusjes: [
       { id: 'k1', naam: 'Tafel dekken', icon: 'plate', waarde: 1, keer: 1, per: 'dag' },
@@ -166,7 +172,8 @@ function beginState() {
       { id: 'b2', naam: 'Tv kijken', icon: 'tv', kosten: 2, duur: 15, keer: 1, per: 'week' },
       { id: 'b3', naam: 'Extra voorleesverhaal', icon: 'book', kosten: 1, keer: 1, per: 'week' },
       { id: 'b4', naam: 'Later naar bed', icon: 'moon', kosten: 3, keer: 1, per: 'week' },
-      { id: 'b5', naam: 'Toetje kiezen', icon: 'ice', kosten: 1, keer: 1, per: 'week' }
+      { id: 'b5', naam: 'Toetje kiezen', icon: 'ice', kosten: 1, keer: 1, per: 'week' },
+      { id: 'b6', naam: 'Flesjes Sorteren', icon: 'game', kosten: 2, duur: 15, keer: 1, per: 'week', spel: SPELLEN[1][0] }
     ],
     // Taken: elke keer een ster; alle sterren binnen een week = taak voltooid = beloning.
     taken: [
@@ -228,7 +235,9 @@ function metHoeVaak(st) {
   return {
     ...st,
     klusjes: st.klusjes.map((k) => ({ keer: 1, per: 'dag', ...k })),
-    beloningen: st.beloningen.map((b) => ({ keer: 1, per: 'week', ...b })),
+    beloningen: [...st.beloningen.map((b) => ({ keer: 1, per: 'week', ...b })),
+      ...(st.spelErbij || st.beloningen.some((b) => b.spel) ? [] : [beginState().beloningen.find((b) => b.spel)])],
+    spelErbij: true,
     kids: st.kids.map((k) => ({ thema: { noor: 'eenhoorn', daan: 'dino' }[k.id] || 'geen', ...k })),
     // Timers onthouden nu hun eindtijd; oude demo-timers worden gepauzeerd.
     timers: st.timers.filter((t) => t.status !== 'klaar').map((t) => (t.status === 'loopt' && !t.eind ? { ...t, status: 'pauze' } : t))
@@ -443,6 +452,12 @@ function belStatus(kid, b) {
   return 'vrij';
 }
 
+// Timer van een goedgekeurde spelletje-beloning die nog niet om is.
+function spelTimer(kid, b) {
+  if (!b || !b.spel || !b.duur) return null;
+  return s.timers.find((t) => t.kid === kid && t.ref === b.id && !timerKlaar(t)) || null;
+}
+
 // ---------- taken ----------
 const taakVan = (id) => (s.taken || []).find((t) => t.id === id);
 // Taken waar het kind deze week op focust (een nieuwe week begint leeg).
@@ -501,6 +516,8 @@ const acties = {
     if (!DEMO) return;
     s = beginState();
     bewaar();
+    gevierd = null;
+    try { localStorage.removeItem(GEVIERD); } catch (e) { /* negeren */ }
     melding('Demo is teruggezet');
   },
   tablet(d) { zet({ tabletKid: d.id }); },
@@ -619,14 +636,14 @@ const acties = {
 
   // Beheer: kinderen, klusjes en beloningen
   bewerk(d) {
-    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', zeker: false } }); }
+    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', groot: !!k.groot, zeker: false } }); }
     else if (d.x === 'klus') { const k = klusVan(d.id); zet({ edit: { soort: 'klus', id: k.id, naam: k.naam, icon: k.icon, waarde: k.waarde, keer: k.keer, per: k.per, zeker: false } }); }
     else if (d.x === 'taak') { const t = taakVan(d.id); zet({ edit: { soort: 'taak', id: t.id, naam: t.naam, icon: t.icon, doel: t.doel, beloning: t.beloning, zeker: false } }); }
-    else { const b = belVan(d.id); zet({ edit: { soort: 'bel', id: b.id, naam: b.naam, icon: b.icon, kosten: b.kosten, duur: b.duur || 0, keer: b.keer, per: b.per, zeker: false } }); }
+    else { const b = belVan(d.id); zet({ edit: { soort: 'bel', id: b.id, naam: b.naam, icon: b.icon, kosten: b.kosten, duur: b.duur || 0, keer: b.keer, per: b.per, spel: b.spel || '', zeker: false } }); }
   },
   nieuw(d) {
     const vrij = KLEUREN.find(([c]) => !s.kids.some((k) => k.kleur === c)) || KLEUREN[0];
-    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen' } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag' } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1 } : { naam: '', icon: 'gift', kosten: 1, duur: 0, keer: 1, per: 'week' };
+    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag' } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1 } : { naam: '', icon: 'gift', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
     zet({ edit: { soort: d.x, id: null, ...basis, zeker: false } });
   },
   editVeld(d) {
@@ -636,6 +653,7 @@ const acties = {
     if (d.x === 'waarde' || d.x === 'kosten' || d.x === 'beloning') v = Math.min(10, Math.max(1, e[d.x] + (d.id === '+' ? 1 : -1)));
     if (d.x === 'doel') v = Math.min(14, Math.max(1, e.doel + (d.id === '+' ? 1 : -1)));
     if (d.x === 'duur' || d.x === 'keer') v = Number(d.id);
+    if (d.x === 'groot') v = !e.groot;
     zet({ edit: { ...e, [d.x]: v, zeker: false } });
   },
   editSluit() { zet({ edit: null }); },
@@ -646,10 +664,10 @@ const acties = {
     const nieuwId = (p) => p + Date.now().toString(36);
     if (e.soort === 'kid') {
       const [kleur, zacht] = KLEUREN.find(([c]) => c === e.kleur) || KLEUREN[0];
-      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht, thema: e.thema } : k)), edit: null }));
+      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht, thema: e.thema, groot: e.groot } : k)), edit: null }));
       else {
         const id = nieuwId('kid');
-        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht, thema: e.thema }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
+        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht, thema: e.thema, groot: e.groot }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
       }
     } else if (e.soort === 'klus') {
       const item = { naam, icon: e.icon, waarde: e.waarde, keer: e.keer, per: e.per };
@@ -660,7 +678,7 @@ const acties = {
       if (e.id) zet((st) => ({ taken: st.taken.map((t) => (t.id === e.id ? { ...t, ...item } : t)), edit: null }));
       else zet((st) => ({ taken: [...st.taken, { id: nieuwId('t'), ...item }], edit: null }));
     } else {
-      const item = { naam, icon: e.icon, kosten: e.kosten, duur: e.duur || 0, keer: e.keer, per: e.per };
+      const item = { naam, icon: e.icon, kosten: e.kosten, duur: e.duur || 0, keer: e.keer, per: e.per, spel: e.spel || '' };
       if (e.id) zet((st) => ({ beloningen: st.beloningen.map((b) => (b.id === e.id ? { ...b, ...item } : b)), edit: null }));
       else zet((st) => ({ beloningen: [...st.beloningen, { id: nieuwId('b'), ...item }], edit: null }));
     }
@@ -766,6 +784,16 @@ const acties = {
     if (status === 'op' || stats(kid).beschikbaar < b.kosten) return;
     voegToe({ kid, type: 'beloning', ref: b.id, label: b.naam, amount: -b.kosten, status: 'aangevraagd', bron: 'kind' });
   },
+  // Spelletje-beloning: openen en (als er een timer bij hoort) de timer starten.
+  spelen(d) {
+    const b = belVan(d.id);
+    const t = spelTimer(s.tabletKid, b);
+    if (!b || !b.spel || (b.duur && !t)) return;
+    window.open(b.spel, '_blank', 'noopener');
+    if (t && t.status === 'wacht') acties.timer({ id: t.id, x: 'start' });
+  },
+  groot() { zet((st) => ({ kids: st.kids.map((k) => (k.id === st.tabletKid ? { ...k, groot: !k.groot } : k)) })); },
+  feestWeg() { volgendFeest(); },
   kindScherm(d) { zet({ kindScherm: d.id }); },
   // Kind kiest een taak voor deze week (of haalt hem weg zolang er nog geen ster op staat).
   focusKies(d) {
@@ -1001,7 +1029,7 @@ function schermBeheer() {
     </div>
     <h2 class="sec">Beloningen</h2>
     <div class="lijst">
-      ${s.beloningen.map((b) => rij('bel', b.id, icon(b.icon, 22), b.naam, b.kosten + ' ' + munt(b.kosten) + (b.duur ? ' · ' + b.duur + ' min' : '') + ' · ' + b.keer + '×/' + b.per)).join('')}
+      ${s.beloningen.map((b) => rij('bel', b.id, icon(b.icon, 22), b.naam, b.kosten + ' ' + munt(b.kosten) + (b.duur ? ' · ' + b.duur + ' min' : '') + (b.spel ? ' · spel' : '') + ' · ' + b.keer + '×/' + b.per)).join('')}
       ${toevoegen('bel', 'Beloning toevoegen')}
     </div>
     <h2 class="sec">Instellingen</h2>
@@ -1059,7 +1087,11 @@ function sheetBewerk() {
       <div class="lbl">Thema in de kind-app</div>
       <div class="themas">${THEMAS.map(([id, label]) => `<button type="button" class="thema-knop${e.thema === id ? ' on' : ''}" aria-pressed="${e.thema === id}" data-a="editVeld" data-x="thema" data-id="${id}">
         ${MASCOTTE[id] ? MASCOTTE[id](48) : `<span class="thema-leeg">${coin(32)}</span>`}<span>${label}</span>
-      </button>`).join('')}</div>`;
+      </button>`).join('')}</div>
+      <button type="button" class="lrij" data-a="editVeld" data-x="groot" aria-pressed="${!!e.groot}">
+        <span class="col"><span>Grote plaatjes</span><small>Voor kinderen die nog niet lezen: grote symbolen op de kaarten</small></span>
+        <span class="switch${e.groot ? ' on' : ''}"><span></span></span>
+      </button>`;
   } else if (e.soort === 'taak') {
     const stap = (veld, label, eenheid) => `<div class="stepper">
         <span class="lbl grow">${label}</span>
@@ -1092,7 +1124,10 @@ function sheetBewerk() {
         <button type="button" class="seg${e.per === 'week' ? ' on' : ''}" aria-pressed="${e.per === 'week'}" data-a="editVeld" data-x="per" data-id="week">Per week</button>
       </div>
       ${isKlus ? '' : `<div class="lbl">Timer na goedkeuring</div>
-        <div class="pills wrap">${DUREN.map((m) => `<button type="button" class="pill${(e.duur || 0) === m ? ' on' : ''}" aria-pressed="${(e.duur || 0) === m}" data-a="editVeld" data-x="duur" data-id="${m}">${m ? m + ' min' : 'Geen'}</button>`).join('')}</div>`}`;
+        <div class="pills wrap">${DUREN.map((m) => `<button type="button" class="pill${(e.duur || 0) === m ? ' on' : ''}" aria-pressed="${(e.duur || 0) === m}" data-a="editVeld" data-x="duur" data-id="${m}">${m ? m + ' min' : 'Geen'}</button>`).join('')}</div>
+        <div class="lbl">Opent spelletje</div>
+        <div class="pills wrap">${SPELLEN.map(([url, label]) => `<button type="button" class="pill${(e.spel || '') === url ? ' on' : ''}" aria-pressed="${(e.spel || '') === url}" data-a="editVeld" data-x="spel" data-id="${url}">${label}</button>`).join('')}</div>
+        ${e.spel ? `<p class="muted" style="margin:0">Na goedkeuring staat er "Speel nu" op de kaart. Tikt het kind erop, dan opent het spelletje${e.duur ? ' en start de timer van ' + e.duur + ' minuten' : ''}.</p>` : ''}`}`;
   }
   const kanWeg = e.id && !(DEMO && e.soort === 'kid' && s.kids.length <= 1);
   const waarschuwing = e.soort === 'kid'
@@ -1318,6 +1353,8 @@ const STATUS_BEL = {
   afgewezen: { chip: 'Niet deze keer', voet: 'Tik om opnieuw te vragen' }
 };
 const STATUS_MELD = { aangevraagd: 'Gemeld', goed: 'Goedgekeurd!', afgewezen: 'Niet goedgekeurd' };
+// Een symbool bij elke status, zodat ook een kind dat nog niet leest het snapt.
+const CHIP_ICOON = { aangevraagd: IC.klok, goed: IC.vink, op: IC.vink, afgewezen: IC.kruis };
 
 function renderKind() {
   const kind = kidVan(s.tabletKid);
@@ -1325,7 +1362,7 @@ function renderKind() {
   const st = stats(kind.id);
   const v = valuta(kind);
   const thema = MASCOTTE[kind.thema] ? kind.thema : 'geen';
-  $('#kind').className = 'tablet thema-' + thema;
+  $('#kind').className = 'tablet thema-' + thema + (kind.groot ? ' groot' : '');
   $('#kind').style.background = thema === 'geen' ? kind.zacht : '';
 
   const vakjes = Array.from({ length: s.maxWeek }, (_, i) => (i < st.week ? `<span class="wk-vol">${v.icoon(24)}</span>` : '<i></i>')).join('');
@@ -1353,19 +1390,33 @@ function renderKind() {
   const beloningen = s.beloningen.map((b) => {
     const status = belStatus(kind.id, b);
     const info = STATUS_BEL[status];
+    const spelT = spelTimer(kind.id, b);
+    const speelbaar = b.spel && (status === 'goed' || status === 'op') && (!b.duur || spelT);
+    if (speelbaar) {
+      return `<button type="button" class="rcard s-goed speel" data-a="spelen" data-id="${b.id}">
+        <span class="rtop">
+          <span class="ricon">${icon(b.icon, 38, 1.5)}</span>
+          <span class="chip c-goed">${icon(IC.vink, 14, 3)}Goedgekeurd</span>
+        </span>
+        <span class="rnaam">${b.naam}</span>
+        ${b.duur ? `<span class="badges"><span class="duur">${icon(IC.klok, 18, 2)}${b.duur} minuten</span></span>` : ''}
+        <span class="speel-knop">${icon(IC.speel, 30, 0)}${spelT && spelT.status !== 'wacht' ? 'Verder spelen' : 'Speel nu'}</span>
+      </button>`;
+    }
     const tekort = status !== 'aangevraagd' && status !== 'op' && st.beschikbaar < b.kosten;
     const nodig = b.kosten - st.beschikbaar;
     const n = gebruikt(kind.id, 'beloning', b);
     const nog = b.keer - n;
     const keerTekst = n > 0 && nog > 0 ? 'nog ' + nog + '× ' + periodeNu(b.per) : perTekst(b);
-    const voet = status === 'op' ? (b.per === 'dag' ? 'Vandaag op, morgen weer' : 'Deze week op') : info.voet;
+    const voet = b.spel && b.duur && (status === 'goed' || status === 'op') ? 'Speeltijd is om' : status === 'op' ? (b.per === 'dag' ? 'Vandaag op, morgen weer' : 'Deze week op') : info.voet;
     return `<button type="button" class="rcard s-${status}${tekort ? ' dim' : ''}" data-a="beloning" data-id="${b.id}">
       <span class="rtop">
         <span class="ricon">${icon(b.icon, 38, 1.5)}</span>
-        ${info.chip ? `<span class="chip c-${status}">${info.chip}</span>` : ''}
+        ${info.chip ? `<span class="chip c-${status}">${icon(CHIP_ICOON[status], 14, 3)}${info.chip}</span>` : ''}
       </span>
       <span class="rnaam">${b.naam}</span>
       <span class="badges">
+        ${b.spel ? `<span class="duur">${icon(IC.game, 18, 2)}Spelletje</span>` : ''}
         ${b.duur ? `<span class="duur">${icon(IC.klok, 18, 2)}${b.duur} minuten</span>` : ''}
         <span class="duur">${icon(IC.herhaal, 18, 2)}${keerTekst}</span>
       </span>
@@ -1425,7 +1476,7 @@ function renderKind() {
         const klaar = status === 'vrij' && gebruikt(kind.id, 'klus', k) >= k.keer;
         const vol = status === 'vrij' && !klaar && k.waarde > ruimte;
         const chip = status !== 'vrij'
-          ? `<span class="chip c-${status}">${STATUS_MELD[status]}</span>`
+          ? `<span class="chip c-${status}">${icon(CHIP_ICOON[status], 14, 3)}${STATUS_MELD[status]}</span>`
           : klaar
             ? `<span class="chip c-vol">${k.per === 'dag' ? 'Vandaag gedaan' : 'Deze week gedaan'}</span>`
             : `<span class="chip ${vol ? 'c-vol' : 'c-vrij'}">${vol ? 'Weeklimiet bereikt' : '+' + k.waarde + ' ' + v.woord(k.waarde)}</span>`;
@@ -1481,6 +1532,104 @@ function renderKind() {
     </div>`;
 }
 
+// ---------- feestje: confetti als er iets verdiend is ----------
+// Per tablet onthouden welke goedgekeurde klusjes en voltooide taken al gevierd zijn.
+const GEVIERD = 'muntjes-gevierd';
+let gevierd = null;
+let feestRij = [];
+let feestTimer = null;
+
+function zoekFeest() {
+  const kind = kidVan(s.tabletKid);
+  if (!kind) return;
+  if (!gevierd) {
+    try { gevierd = JSON.parse(localStorage.getItem(GEVIERD) || '{}') || {}; } catch (e) { gevierd = {}; }
+  }
+  const sleutel = (t) => t.id + ':' + t.ts;
+  const verdiend = s.tx.filter((t) => t.kid === kind.id && t.status === 'goed' && ((t.type === 'klus' && t.amount > 0) || t.type === 'taakklaar'));
+  const eerste = !gevierd[kind.id];
+  const al = new Set(gevierd[kind.id] || []);
+  const nieuw = eerste ? [] : verdiend.filter((t) => !al.has(sleutel(t)));
+  if (!eerste && !nieuw.length) return;
+  // Alleen bijhouden wat er nog is, zodat de lijst niet blijft groeien.
+  gevierd[kind.id] = verdiend.map(sleutel);
+  try { localStorage.setItem(GEVIERD, JSON.stringify(gevierd)); } catch (e) { /* negeren */ }
+  if (!nieuw.length) return;
+  feestRij.push(...nieuw.sort((a, b) => a.ts - b.ts).map((t) => ({ t, kind })));
+  if (!feestTimer && $('#feest').hidden) volgendFeest();
+}
+
+function volgendFeest() {
+  clearTimeout(feestTimer);
+  feestTimer = null;
+  const el = $('#feest');
+  const volgende = feestRij.shift();
+  if (!volgende) { el.hidden = true; el.innerHTML = ''; return; }
+  const { t, kind } = volgende;
+  const v = valuta(kind);
+  const taak = t.type === 'taakklaar';
+  const act = taak ? taakVan(t.ref) : klusVan(t.ref);
+  const thema = MASCOTTE[kind.thema] ? kind.thema : 'geen';
+  el.innerHTML = `<canvas class="confetti" aria-hidden="true"></canvas>
+    <button type="button" class="feest-kaart" data-a="feestWeg" aria-label="Sluiten">
+      <span class="feest-beeld">${thema !== 'geen' ? MASCOTTE[thema](120) : coin(110)}</span>
+      <span class="feest-titel" style="color:${{ eenhoorn: '#7C3AED', dino: '#3F6212' }[thema] || kind.kleur}">Hoera, ${esc(kind.naam)}!</span>
+      <span class="feest-tekst">${taak ? 'Je hebt een taak voltooid!' : 'Je hebt een klusje geklaard!'}</span>
+      <span class="feest-wat">${act ? `<span class="ricon">${icon(act.icon, 34, 1.5)}</span>` : ''}${esc(taak ? (act ? act.naam : t.label) : t.label)}</span>
+      <span class="feest-munt">${v.icoon(52).repeat(Math.min(5, Math.max(1, t.amount)))}<b>+${t.amount} ${v.woord(t.amount)}</b></span>
+    </button>`;
+  el.hidden = false;
+  confetti(el.querySelector('canvas'), thema);
+  feestTimer = setTimeout(volgendFeest, 5000);
+}
+
+function confetti(canvas, thema) {
+  const kleuren = { eenhoorn: ['#F9A8D4', '#C4B5FD', '#93C5FD', '#FCD34D', '#F472B6'], dino: ['#84CC16', '#FB923C', '#FCD34D', '#65A30D', '#C2410C'], geen: ['#F2B705', '#2457C5', '#22784A', '#E8892B', '#B0306A'] }[thema];
+  const rust = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const r = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = r.width * dpr;
+  canvas.height = r.height * dpr;
+  const c = canvas.getContext('2d');
+  c.scale(dpr, dpr);
+  const n = rust ? 40 : 180;
+  // Twee kanonnen linksonder en rechtsonder die naar het midden schieten.
+  const stukjes = Array.from({ length: n }, (_, i) => {
+    const links = i % 2 === 0;
+    const hoek = (links ? -60 : -120) + (Math.random() - 0.5) * 50;
+    const snel = (rust ? 6 : 11) + Math.random() * 9;
+    return {
+      x: links ? 0 : r.width, y: r.height * 0.85,
+      vx: Math.cos(hoek * Math.PI / 180) * snel, vy: Math.sin(hoek * Math.PI / 180) * snel,
+      w: 7 + Math.random() * 7, h: 4 + Math.random() * 6, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4,
+      kleur: kleuren[i % kleuren.length], rond: Math.random() < 0.3
+    };
+  });
+  const begin = performance.now();
+  (function stap(nu) {
+    if (!canvas.isConnected) return;
+    const tijd = nu - begin;
+    c.clearRect(0, 0, r.width, r.height);
+    c.globalAlpha = Math.max(0, Math.min(1, (4200 - tijd) / 800));
+    stukjes.forEach((p) => {
+      p.vy += 0.28;
+      p.vx *= 0.99;
+      p.vy *= 0.99;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      c.save();
+      c.translate(p.x, p.y);
+      c.rotate(p.rot);
+      c.fillStyle = p.kleur;
+      if (p.rond) { c.beginPath(); c.arc(0, 0, p.h / 1.4, 0, 7); c.fill(); }
+      else c.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.rot * 2)));
+      c.restore();
+    });
+    if (tijd < 4200) requestAnimationFrame(stap);
+  })(begin);
+}
+
 // ---------- demo-balk ----------
 function renderBar() {
   const opties = [['beide', 'Beide'], ['ouder', 'Ouder-app'], ['kind', 'Kind-app']];
@@ -1491,6 +1640,7 @@ function renderBar() {
         const aan = s.tabletKid === k.id;
         return `<button type="button" class="seg-btn" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="tablet" data-id="${k.id}">${k.naam}</button>`;
       }).join('')}
+      ${kidVan(s.tabletKid) ? `<button type="button" class="seg-btn${kidVan(s.tabletKid).groot ? ' on' : ''}" aria-pressed="${!!kidVan(s.tabletKid).groot}" data-a="groot">Grote plaatjes</button>` : ''}
     </div>`;
   return `
     <div class="bar-title">${coin(26)}<span>Muntjes-app</span><span class="tag">preview</span></div>
@@ -1526,6 +1676,7 @@ function render() {
   $('#col-kind').hidden = weergave === 'ouder';
   $('#ouder').innerHTML = weergave === 'kind' ? '' : !DEMO && !volwassene() ? renderWelkom() : renderOuder();
   $('#kind').innerHTML = weergave === 'ouder' ? '' : renderKind();
+  if (weergave !== 'ouder' && (DEMO || rol === 'kind')) zoekFeest();
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
 
   scrolls.forEach(([k, top]) => { const el = document.querySelector(`[data-scroll="${k}"]`); if (el) el.scrollTop = top; });
