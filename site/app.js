@@ -934,12 +934,27 @@ const acties = {
     voegToe({ kid, type: 'beloning', ref: b.id, label: b.naam, amount: -b.kosten, status: 'aangevraagd', bron: 'kind' });
   },
   // Spelletje-beloning: openen en (als er een timer bij hoort) de timer starten.
-  spelen(d) {
+  // Het spel krijgt een sleutel voor deze timer en stopt vanzelf als de tijd om is.
+  async spelen(d) {
     const b = belVan(d.id);
     const t = spelTimer(s.tabletKid, b);
     if (!b || !b.spel || (b.duur && !t)) return;
-    window.open(b.spel, '_blank', 'noopener');
     if (t && t.status === 'wacht') acties.timer({ id: t.id, x: 'start' });
+    const url = new URL(b.spel);
+    if (t && DEMO) url.searchParams.set('speeltijd', Math.ceil(timerRest(t)));
+    if (t && !DEMO) {
+      // Venster meteen openen (anders blokkeert de browser het), daarna het adres met de sleutel.
+      const w = window.open('about:blank', '_blank');
+      const r = await api('speelsleutel', undefined, '&timer=' + encodeURIComponent(t.id));
+      if (r.ok) {
+        url.searchParams.set('muntjes', location.origin + location.pathname.replace(/[^/]*$/, ''));
+        url.searchParams.set('timer', t.id);
+        url.searchParams.set('sleutel', r.data.sleutel);
+      }
+      if (w) { w.opener = null; w.location.href = url.href; } else location.href = url.href;
+      return;
+    }
+    window.open(url.href, '_blank', 'noopener');
   },
   groot() { zet((st) => ({ kids: st.kids.map((k) => (k.id === st.tabletKid ? { ...k, groot: !k.groot } : k)) })); },
   feestWeg() { volgendFeest(); },

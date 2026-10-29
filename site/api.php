@@ -536,6 +536,13 @@ function stuur_push(array $widgets, bool $alleenTesten = false): array {
     return $uitslag;
 }
 
+// Sleutel per timer (HMAC met een geheim dat alleen op de server staat).
+function speel_sleutel(string $timerId): string {
+    $geheim = instelling('speel_geheim');
+    if ($geheim === null) { $geheim = bin2hex(random_bytes(32)); zet_instelling('speel_geheim', $geheim); }
+    return substr(hash_hmac('sha256', 'speeltijd:' . $timerId, $geheim), 0, 32);
+}
+
 function gebruikers_lijst(): array {
     global $db;
     return array_map(fn($g) => ['id' => (int)$g['id'], 'naam' => $g['naam'], 'rol' => $g['rol']],
@@ -785,6 +792,39 @@ switch ($actie) {
         $w = widget_wie();
         if ($w) $db->prepare('DELETE FROM widgets WHERE id = ?')->execute([$w['id']]);
         out(['ok' => true]);
+    }
+
+    // Spelletje-beloning: sleutel voor het spel om de resttijd van één timer op te vragen.
+    case 'speelsleutel': {
+        $w = wie();
+        if (!$w) fail('Log eerst in.', 401);
+        $id = (string)($_GET['timer'] ?? '');
+        $s = lees_staat();
+        $data = $s ? json_decode($s['data'], true) : [];
+        $timer = null;
+        foreach ($data['timers'] ?? [] as $t) if ((string)($t['id'] ?? '') === $id) $timer = $t;
+        $bel = null;
+        foreach ($data['beloningen'] ?? [] as $b) if ($timer && ($b['id'] ?? '') === ($timer['ref'] ?? '')) $bel = $b;
+        if (!$timer || !$bel || empty($bel['spel'])) fail('Deze speeltijd bestaat niet (meer).', 404);
+        if ($w['rol'] === 'kind' && ($timer['kid'] ?? '') !== $w['kid']) fail('Dit mag alleen papa of mama.', 403);
+        out(['sleutel' => speel_sleutel($id)]);
+    }
+
+    // Voor het spel (ander domein): hoeveel speeltijd is er nog? Alleen met de sleutel van die timer,
+    // en alleen de status en de resttijd (geen gezinsgegevens).
+    case 'speeltijd': {
+        header('Access-Control-Allow-Origin: *');
+        $id = (string)($_GET['timer'] ?? '');
+        if ($id === '' || !hash_equals(speel_sleutel($id), (string)($_GET['sleutel'] ?? ''))) fail('Onbekende speeltijd.', 403);
+        $s = lees_staat();
+        $data = $s ? json_decode($s['data'], true) : [];
+        foreach ($data['timers'] ?? [] as $t) {
+            if ((string)($t['id'] ?? '') !== $id) continue;
+            $status = (string)($t['status'] ?? '');
+            $rest = $status === 'loopt' ? max(0, ((float)($t['eind'] ?? 0) - microtime(true) * 1000) / 1000) : (float)($t['rest'] ?? 0);
+            out(['status' => $status, 'rest' => (int)ceil($rest), 'naam' => (string)($t['naam'] ?? '')]);
+        }
+        out(['status' => 'weg', 'rest' => 0]);   // gestopt of afgerond
     }
 
     // Meldingen op deze telefoon (Web Push)
