@@ -331,6 +331,7 @@ async function api(actie, body, query = '') {
 async function synchroniseer() {
   if (bezig) return;
   bezig = true;
+  let herlaad = false;
   try {
     while (onbevestigd.length) {
       const n = onbevestigd.length;
@@ -347,7 +348,8 @@ async function synchroniseer() {
         afgemeld();
         return;
       } else {
-        if (r.status === 403) onbevestigd = [];
+        // Geweigerd: de wijziging weggooien en de gegevens van de server opnieuw ophalen.
+        if (r.status === 403) { onbevestigd = []; herlaad = true; }
         melding(r.data.fout || 'Niet opgeslagen: geen verbinding. Ik probeer het zo opnieuw.');
         break;
       }
@@ -355,7 +357,7 @@ async function synchroniseer() {
   } finally {
     bezig = false;
   }
-  if (!onbevestigd.length && versie === 0) haal(true);
+  if (herlaad || (!onbevestigd.length && versie === 0)) haal(true);
 }
 
 async function haal(alles) {
@@ -1529,7 +1531,8 @@ function renderKind() {
         ${melden}
         <p class="info">Op elke kaart zie je hoe vaak je hem mag gebruiken. Je verdient maximaal ${s.maxWeek} ${v.veel} per week.</p>`}
       </div>
-    </div>`;
+    </div>
+    ${s.toast && weergave === 'kind' ? `<div class="toast kind-toast" role="status"><span>${esc(s.toast)}</span></div>` : ''}`;
 }
 
 // ---------- feestje: confetti als er iets verdiend is ----------
