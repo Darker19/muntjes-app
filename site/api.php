@@ -283,10 +283,15 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
     foreach (array_unique(array_merge(array_keys($fo), array_keys($fn))) as $k) {
         if ((string)$k !== $kid && !gelijk($fo[$k] ?? null, $fn[$k] ?? null)) return waarom('focus ander kind', $nee);
     }
-    if (isset($fn[$kid])) {
+    // Alleen controleren als de tablet de weekkeuze echt verandert (anders kan een oude keuze,
+    // bijv. van voor een lagere "max. taken", elk verzoek van de tablet blokkeren).
+    if (isset($fn[$kid]) && !gelijk($fo[$kid] ?? null, $fn[$kid])) {
         $ids = $fn[$kid]['ids'] ?? null;
+        $week = $fn[$kid]['week'] ?? null;
         $takenIds = array_column($oud['taken'] ?? [], 'id');
-        if (!is_array($ids) || count($ids) > (int)($oud['maxFocus'] ?? 3) || !is_int($fn[$kid]['week'] ?? null)) return waarom('focus vorm', $nee);
+        if (!is_array($ids)) return waarom('focus ids', $nee);
+        if (count($ids) > (int)($oud['maxFocus'] ?? 3) && count($ids) > count($fo[$kid]['ids'] ?? [])) return waarom('focus te veel ' . count($ids), $nee);
+        if (!is_numeric($week) || floor((float)$week) != $week) return waarom('focus week ' . gettype($week), $nee);
         foreach ($ids as $id) if (!in_array($id, $takenIds, true)) return waarom('focus taak '.$id, $nee);
     }
 
