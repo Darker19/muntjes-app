@@ -584,7 +584,7 @@ switch ($actie) {
         if (!$w) fail('Niet ingelogd.', 401);
         if (!isset($in['data']) || !is_array($in['data']) || !is_array($in['data']['kids'] ?? null)) fail('Ongeldige gegevens.');
         // Opnieuw inlezen als objecten, zodat {} ook als {} wordt bewaard.
-        $data = json_encode(json_decode($raw)->data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $obj = json_decode($raw)->data;
 
         $db->exec('BEGIN IMMEDIATE');
         $transactie = true;
@@ -595,6 +595,16 @@ switch ($actie) {
             $transactie = false;
             stuur_staat($s, 409);
         }
+        // Instellingen die nog niet op de server staan (van na een update) vult de app zelf aan
+        // met de standaardwaarde. Die neemt een tablet of familielid niet mee; dat doet een ouder.
+        if ($s && $w['rol'] !== 'ouder') {
+            $opgeslagen = json_decode($s['data'], true);
+            foreach (array_keys($in['data']) as $k) {
+                if (array_key_exists($k, $opgeslagen) || in_array($k, ['tx', 'nextId', 'focus', 'timers'], true)) continue;
+                unset($in['data'][$k], $obj->$k);
+            }
+        }
+        $data = json_encode($obj, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if ($w['rol'] === 'kind') {
             if (!$s) fail('Dit mag alleen papa of mama aanpassen.', 403);
             $fout = kind_fout(json_decode($s['data'], true), $in['data'], $w['kid']);
