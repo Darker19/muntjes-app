@@ -519,6 +519,49 @@ const ster = (size = 24, vol = true) => `<svg width="${size}" height="${size}" v
 
 const laatsteMelding = (kid, k) => nieuwsteEerst(s.tx).find((t) => t.kid === kid && t.type === 'klus' && t.ref === k.id && t.bron === 'kind' && !t.gezien);
 
+// Geluidjes op de tablet van het kind, gemaakt met Web Audio (geen geluidsbestanden).
+let audio = null;
+function audioCtx() {
+  if (!audio) {
+    try { const C = window.AudioContext || window.webkitAudioContext; audio = new C(); } catch (e) { return null; }
+  }
+  if (audio.state === 'suspended') audio.resume().catch(() => {});
+  return audio;
+}
+// Browsers laten pas geluid toe na een eerste tik; dan alvast aanzetten.
+document.addEventListener('pointerdown', () => { if (audio) audio.resume().catch(() => {}); else if (weergave !== 'ouder') audioCtx(); }, { capture: true });
+
+function toon(c, freq, start, duur, type = 'sine', vol = 0.18, naar = null) {
+  const g = c.createGain();
+  const o = c.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, c.currentTime + start);
+  if (naar) o.frequency.exponentialRampToValueAtTime(naar, c.currentTime + start + duur);
+  g.gain.setValueAtTime(0.0001, c.currentTime + start);
+  g.gain.exponentialRampToValueAtTime(vol, c.currentTime + start + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + start + duur);
+  o.connect(g);
+  g.connect(c.destination);
+  o.start(c.currentTime + start);
+  o.stop(c.currentTime + start + duur + 0.05);
+}
+
+const GELUIDEN = {
+  tik: (c) => toon(c, 520, 0, 0.09, 'triangle', 0.14, 880),
+  munt: (c) => { toon(c, 1319, 0, 0.12, 'square', 0.05); toon(c, 1760, 0.07, 0.3, 'square', 0.05); },
+  ster: (c) => [1568, 1976, 2349, 2637, 3136].forEach((f, i) => toon(c, f, i * 0.06, 0.35, 'sine', 0.1)),
+  feest: (c) => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => toon(c, f, i * 0.11, i === 5 ? 0.6 : 0.16, 'triangle', 0.16)),
+  terug: (c) => { toon(c, 392, 0, 0.18, 'triangle', 0.14, 330); toon(c, 523, 0.2, 0.3, 'triangle', 0.14, 784); }
+};
+
+// Alleen op de kind-app, en niet als papa of mama de geluidjes voor dit kind uit heeft gezet.
+function geluid(naam) {
+  const kind = kidVan(s.tabletKid);
+  if (weergave === 'ouder' || !kind || kind.stil || (!DEMO && rol !== 'kind')) return;
+  const c = audioCtx();
+  if (c && GELUIDEN[naam]) { try { GELUIDEN[naam](c); } catch (e) { /* geen geluid mogelijk */ } }
+}
+
 function piep() {
   try {
     const C = window.AudioContext || window.webkitAudioContext;
@@ -552,6 +595,7 @@ const acties = {
     s = beginState();
     bewaar();
     gevierd = null;
+    saldoBasis = null;
     try { localStorage.removeItem(GEVIERD); } catch (e) { /* negeren */ }
     melding('Demo is teruggezet');
   },
@@ -673,14 +717,14 @@ const acties = {
 
   // Beheer: kinderen, klusjes en beloningen
   bewerk(d) {
-    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', groot: !!k.groot, zeker: false } }); }
+    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', groot: !!k.groot, stil: !!k.stil, zeker: false } }); }
     else if (d.x === 'klus') { const k = klusVan(d.id); zet({ edit: { soort: 'klus', id: k.id, naam: k.naam, icon: k.icon, waarde: k.waarde, keer: k.keer, per: k.per, zeker: false } }); }
     else if (d.x === 'taak') { const t = taakVan(d.id); zet({ edit: { soort: 'taak', id: t.id, naam: t.naam, icon: t.icon, doel: t.doel, beloning: t.beloning, zeker: false } }); }
     else { const b = belVan(d.id); zet({ edit: { soort: 'bel', id: b.id, naam: b.naam, icon: b.icon, kosten: b.kosten, duur: b.duur || 0, keer: b.keer, per: b.per, spel: b.spel || '', zeker: false } }); }
   },
   nieuw(d) {
     const vrij = KLEUREN.find(([c]) => !s.kids.some((k) => k.kleur === c)) || KLEUREN[0];
-    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag' } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1 } : { naam: '', icon: 'gift', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
+    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false, stil: false } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag' } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1 } : { naam: '', icon: 'gift', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
     zet({ edit: { soort: d.x, id: null, ...basis, zeker: false } });
   },
   editVeld(d) {
@@ -691,6 +735,7 @@ const acties = {
     if (d.x === 'doel') v = Math.min(14, Math.max(1, e.doel + (d.id === '+' ? 1 : -1)));
     if (d.x === 'duur' || d.x === 'keer') v = Number(d.id);
     if (d.x === 'groot') v = !e.groot;
+    if (d.x === 'stil') v = !e.stil;
     zet({ edit: { ...e, [d.x]: v, zeker: false } });
   },
   editSluit() { zet({ edit: null }); },
@@ -701,10 +746,10 @@ const acties = {
     const nieuwId = (p) => p + Date.now().toString(36);
     if (e.soort === 'kid') {
       const [kleur, zacht] = KLEUREN.find(([c]) => c === e.kleur) || KLEUREN[0];
-      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht, thema: e.thema, groot: e.groot } : k)), edit: null }));
+      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil } : k)), edit: null }));
       else {
         const id = nieuwId('kid');
-        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht, thema: e.thema, groot: e.groot }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
+        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
       }
     } else if (e.soort === 'klus') {
       const item = { naam, icon: e.icon, waarde: e.waarde, keer: e.keer, per: e.per };
@@ -885,6 +930,7 @@ const acties = {
       return;
     }
     if (status === 'op' || stats(kid).beschikbaar < b.kosten) return;
+    geluid('tik');
     voegToe({ kid, type: 'beloning', ref: b.id, label: b.naam, amount: -b.kosten, status: 'aangevraagd', bron: 'kind' });
   },
   // Spelletje-beloning: openen en (als er een timer bij hoort) de timer starten.
@@ -917,6 +963,7 @@ const acties = {
     const open = sterTx(kid, taak.id, 'aangevraagd')[0];
     if (open) { zet((st) => ({ tx: st.tx.filter((x) => x.id !== open.id) })); return; }
     if (taakKlaar(kid, taak.id) || sterTx(kid, taak.id, 'goed').length >= taak.doel) return;
+    geluid('tik');
     voegToe({ kid, type: 'ster', ref: taak.id, label: taak.naam, amount: 0, status: 'aangevraagd', bron: 'kind' });
   },
   meld(d) {
@@ -930,6 +977,7 @@ const acties = {
       return;
     }
     if (gebruikt(kid, 'klus', k) >= k.keer || stats(kid).week + openMeldingen(kid) + k.waarde > s.maxWeek) return;
+    geluid('tik');
     voegToe({ kid, type: 'klus', ref: k.id, label: k.naam, amount: k.waarde, status: 'aangevraagd', bron: 'kind' });
   }
 };
@@ -1246,6 +1294,10 @@ function sheetBewerk() {
       <button type="button" class="lrij" data-a="editVeld" data-x="groot" aria-pressed="${!!e.groot}">
         <span class="col"><span>Grote plaatjes</span><small>Voor kinderen die nog niet lezen: grote symbolen op de kaarten</small></span>
         <span class="switch${e.groot ? ' on' : ''}"><span></span></span>
+      </button>
+      <button type="button" class="lrij" data-a="editVeld" data-x="stil" aria-pressed="${!e.stil}">
+        <span class="col"><span>Geluidjes op de tablet</span><small>Bij muntjes, sterren, confetti en tikken</small></span>
+        <span class="switch${e.stil ? '' : ' on'}"><span></span></span>
       </button>`;
   } else if (e.soort === 'taak') {
     const stap = (veld, label, eenheid) => `<div class="stepper">
@@ -1682,7 +1734,7 @@ function renderKind() {
         <div class="saldo">
           ${thema !== 'geen' ? `<span class="saldo-deco">${MASCOTTE[thema](130)}</span>` : ''}
           <span class="lbl">${v.titel}</span>
-          <div class="saldo-row">${v.icoon(72)}<span class="saldo-num">${st.beschikbaar}</span>
+          <div class="saldo-row">${v.icoon(72)}<span class="saldo-num">${saldoTonen(kind.id, st.beschikbaar)}</span>
             ${(s.taken || []).length ? `<span class="sterren-tel" role="img" aria-label="${sterren} sterren deze week">${ster(44)}<b>${sterren}</b></span>` : ''}</div>
           ${st.gereserveerd > 0
             ? `<span class="res">${st.saldo} ${v.woord(st.saldo)}, waarvan ${st.gereserveerd} gereserveerd</span>`
@@ -1767,6 +1819,7 @@ function volgendFeest() {
     </button>`;
   el.hidden = false;
   confetti(el.querySelector('canvas'), thema, isSter);
+  geluid(isSter ? 'ster' : 'feest');
   feestTimer = setTimeout(volgendFeest, 5000);
 }
 
@@ -1830,6 +1883,124 @@ function confetti(canvas, thema, sterren) {
   })(begin);
 }
 
+// ---------- saldo: tellen en vliegende muntjes ----------
+// Verandert het saldo op de tablet, dan telt het getal mee en vliegen er muntjes:
+// erbij verdiend (van boven), aangevraagd (naar de kaart) of afgewezen ("terug", van de kaart).
+let saldoBasis = null;
+let saldoAnim = null;
+
+function saldoTonen(kid, echt) {
+  // Nog niet aan het tellen: het oude getal laten staan tot saldoCheck (vlak na het tekenen) begint.
+  if (!saldoAnim || saldoAnim.kid !== kid) return saldoBasis && saldoBasis.kid === kid ? saldoBasis.waarde : echt;
+  const t = Math.max(0, Math.min(1, (performance.now() - saldoAnim.t0) / saldoAnim.duur));
+  if (t >= 1) { saldoAnim = null; return echt; }
+  const e = 1 - Math.pow(1 - t, 3);
+  return Math.round(saldoAnim.van + (saldoAnim.naar - saldoAnim.van) * e);
+}
+
+function tel(kid, van, naar, vertraging = 0) {
+  saldoAnim = { kid, van, naar, t0: performance.now() + vertraging, duur: Math.min(1600, 500 + 150 * Math.abs(naar - van)) };
+  (function stap() {
+    if (!saldoAnim) return;
+    const el = document.querySelector('#kind .saldo-num');
+    if (el) el.textContent = saldoTonen(kid, naar);
+    if (saldoAnim) requestAnimationFrame(stap);
+  })();
+}
+
+function saldoCheck() {
+  const kind = kidVan(s.tabletKid);
+  if (!kind) return;
+  const st = stats(kind.id);
+  const bel = (status) => s.tx.filter((t) => t.kid === kind.id && t.type === 'beloning' && t.status === status);
+  const oud = saldoBasis;
+  saldoBasis = { kid: kind.id, waarde: st.beschikbaar, afgewezen: new Set(bel('afgewezen').map((t) => t.id)), open: new Map(bel('aangevraagd').map((t) => [t.id, t.ref])) };
+  if (!oud || oud.kid !== kind.id || oud.waarde === st.beschikbaar) return;
+  const verschil = st.beschikbaar - oud.waarde;
+  const getoond = saldoAnim && saldoAnim.kid === kind.id ? saldoTonen(kind.id, oud.waarde) : oud.waarde;
+  const terug = bel('afgewezen').filter((t) => !oud.afgewezen.has(t.id));
+  const nieuwOpen = bel('aangevraagd').filter((t) => !oud.open.has(t.id));
+  const geannuleerd = [...oud.open].filter(([id]) => !s.tx.some((t) => t.id === id));
+  const n = Math.min(6, Math.abs(verschil));
+  if (verschil > 0 && geannuleerd.length && !terug.length) {
+    vlieg(kind, n, kaartVan(geannuleerd[0][1]), 'saldo', 'tik');
+  } else if (verschil > 0 && terug.length) {
+    vlieg(kind, n, kaartVan(terug[0].ref), 'saldo', 'terug');
+    bubbel(kind, '+' + verschil + ' ' + valuta(kind).woord(verschil) + ' terug!');
+  } else if (verschil > 0) {
+    vlieg(kind, n, 'boven', 'saldo', 'munt');
+  } else if (nieuwOpen.length) {
+    vlieg(kind, n, 'saldo', kaartVan(nieuwOpen[0].ref), null);
+  }
+  tel(kind.id, getoond, st.beschikbaar, verschil > 0 ? 350 : 0);
+}
+
+const kaartVan = (ref) => document.querySelector(`#kind [data-a=beloning][data-id="${ref}"], #kind [data-a=spelen][data-id="${ref}"]`);
+
+// Laag over de tablet voor vliegende muntjes (buiten #kind, zodat tekenen ze niet weghaalt).
+function vliegLaag() {
+  let laag = document.querySelector('.vlieg-laag');
+  if (!laag) {
+    laag = document.createElement('div');
+    laag.className = 'vlieg-laag';
+    $('.tablet-wrap').appendChild(laag);
+  }
+  return laag;
+}
+
+function punt(waar, laag) {
+  const l = laag.getBoundingClientRect();
+  if (waar === 'boven') return { x: l.width / 2, y: 40 };
+  const el = waar === 'saldo' ? document.querySelector('#kind .saldo-row svg') : waar;
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { x: r.left - l.left + r.width / 2, y: r.top - l.top + r.height / 2 };
+}
+
+function vlieg(kind, n, van, naar, klank) {
+  if (!n || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { if (klank) geluid(klank); return; }
+  const laag = vliegLaag();
+  const a = punt(van, laag);
+  const b = punt(naar, laag);
+  if (!a || !b) { if (klank) geluid(klank); return; }
+  if (klank === 'terug') geluid('terug');
+  for (let i = 0; i < n; i++) {
+    const m = document.createElement('span');
+    m.className = 'vlieg-munt';
+    m.innerHTML = valuta(kind).icoon(40);
+    laag.appendChild(m);
+    const dx = (Math.random() - 0.5) * 60;
+    const hoog = Math.min(a.y, b.y) - 90 - Math.random() * 60;
+    const anim = m.animate([
+      { transform: `translate(${a.x - 20}px, ${a.y - 20}px) scale(.6)`, opacity: 0 },
+      { transform: `translate(${a.x - 20 + dx}px, ${a.y - 20}px) scale(1)`, opacity: 1, offset: 0.12 },
+      { transform: `translate(${(a.x + b.x) / 2 - 20 + dx}px, ${hoog}px) scale(1.15)`, offset: 0.55 },
+      { transform: `translate(${b.x - 20}px, ${b.y - 20}px) scale(.7)`, opacity: 1 }
+    ], { duration: 750, delay: i * 110, easing: 'ease-in-out', fill: 'both' });
+    anim.onfinish = () => {
+      m.remove();
+      if (klank === 'munt' || (klank === 'terug' && i === n - 1)) geluid('munt');
+      const doel = naar === 'saldo' ? document.querySelector('#kind .saldo-row svg') : null;
+      if (doel) doel.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
+    };
+  }
+}
+
+function bubbel(kind, tekst) {
+  const laag = vliegLaag();
+  const p = punt('saldo', laag);
+  if (!p) return;
+  const b = document.createElement('span');
+  b.className = 'saldo-bubbel';
+  b.textContent = tekst;
+  b.style.left = p.x + 'px';
+  b.style.top = p.y - 70 + 'px';
+  laag.appendChild(b);
+  b.animate([{ transform: 'translate(-50%, 10px) scale(.7)', opacity: 0 }, { transform: 'translate(-50%, 0) scale(1)', opacity: 1, offset: 0.15 },
+    { transform: 'translate(-50%, -6px)', opacity: 1, offset: 0.8 }, { transform: 'translate(-50%, -30px)', opacity: 0 }], { duration: 2600, easing: 'ease-out', fill: 'both' })
+    .onfinish = () => b.remove();
+}
+
 // ---------- demo-balk ----------
 function renderBar() {
   const opties = [['beide', 'Beide'], ['ouder', 'Ouder-app'], ['kind', 'Kind-app']];
@@ -1877,7 +2048,7 @@ function render() {
   $('#ouder').innerHTML = weergave === 'kind' ? '' : !DEMO && !volwassene() ? renderWelkom() : renderOuder();
   $('#kind').innerHTML = weergave === 'ouder' ? '' : renderKind();
   // Even wachten: een ster en de voltooide taak komen vlak na elkaar binnen.
-  if (weergave !== 'ouder' && (DEMO || rol === 'kind')) { clearTimeout(zoekTimer); zoekTimer = setTimeout(zoekFeest, 60); }
+  if (weergave !== 'ouder' && (DEMO || rol === 'kind')) { clearTimeout(zoekTimer); zoekTimer = setTimeout(() => { zoekFeest(); saldoCheck(); }, 60); }
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
 
   scrolls.forEach(([k, top]) => { const el = document.querySelector(`[data-scroll="${k}"]`); if (el) el.scrollTop = top; });
