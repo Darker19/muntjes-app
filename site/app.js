@@ -20,6 +20,7 @@ const IC = {
   blocks: 'M4 13h7v7H4zM13 13h7v7h-7zM8.5 4h7v7h-7z',
   kamer: 'M3 10h18l-2 10H5zM7 10V6h4v4M14 10l1.5-5 3 1-1.2 4',
   bag: 'M5 8h14l-1 13H6L5 8zM9 8V6a3 3 0 0 1 6 0v2',
+  mand: 'M3 10h18l-2 10H5zM7 10l3-6M17 10l-3-6M9 14v3M12 14v3M15 14v3',
   paw: 'M12 13c-3 0-5 3-5 5.5 0 1.5 1.5 2 2.5 1.5s1.5-1 2.5-1 1.5.5 2.5 1 2.5 0 2.5-1.5c0-2.5-2-5.5-5-5.5zM3.5 10a1.5 2 0 1 0 3 0a1.5 2 0 1 0-3 0M7.5 5.5a1.5 2 0 1 0 3 0a1.5 2 0 1 0-3 0M13.5 5.5a1.5 2 0 1 0 3 0a1.5 2 0 1 0-3 0M17.5 10a1.5 2 0 1 0 3 0a1.5 2 0 1 0-3 0',
   tablet: 'M6 2h12a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2',
   tv: 'M3 7h18v12H3zM8 3l4 4 4-4',
@@ -52,7 +53,7 @@ const KLEUREN = [
   ['#7A4FD0', '#F1ECFB'], ['#0F7C74', '#E4F3F1'], ['#2457C5', '#E8EFFB'], ['#C2410C', '#FCEDE5'],
   ['#B0306A', '#FAE8F0'], ['#4D7C0F', '#EEF5E4'], ['#1D2733', '#ECEFF3']
 ];
-const ICOON_KEUZE = ['plate', 'table', 'kamer', 'bed', 'tooth', 'shirt', 'blocks', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star'];
+const ICOON_KEUZE = ['plate', 'table', 'kamer', 'bed', 'tooth', 'shirt', 'blocks', 'mand', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star'];
 const DUREN = [0, 5, 10, 15, 20, 30, 45, 60];
 const THEMAS = [['geen', 'Standaard'], ['eenhoorn', 'Eenhoorns'], ['dino', 'Dinosaurussen']];
 // Spelletjes die een beloning direct kan openen.
@@ -60,7 +61,7 @@ const SPELLEN = [['', 'Geen'], ['https://spelletjes.darkesttimes.nl/', 'Flesjes 
 const spelNaam = (url) => (SPELLEN.find(([u]) => u === url) || [url, 'Spelletje'])[1];
 
 // Getekende plaatjes voor de kind-app, per thema. Iconen zonder plaatje blijven een lijnicoon.
-const PLAATJES = { plate: 'tafel-dekken', table: 'tafel-afruimen', blocks: 'speelgoed-opruimen', tooth: 'tanden-poetsen', tablet: 'tablet', game: 'spelletje' };
+const PLAATJES = { plate: 'tafel-dekken', table: 'tafel-afruimen', blocks: 'speelgoed-opruimen', mand: 'boodschappen', paw: 'huisdier-voeren', tooth: 'tanden-poetsen', tablet: 'tablet', game: 'spelletje' };
 const PLAATJE_MAP = { geen: 'neutral', eenhoorn: 'unicorn', dino: 'dinosaurus' };
 const plaatje = (d, thema, size, sw) => (PLAATJES[d] ? `<img class="ill" src="img/${PLAATJE_MAP[thema] || 'neutral'}/${PLAATJES[d]}.webp" width="${size}" height="${size}" alt="">` : icon(d, size, sw));
 
@@ -170,7 +171,7 @@ function beginState() {
       { id: 'k4', naam: 'Tanden poetsen zonder zeuren', icon: 'tooth', waarde: 1, keer: 1, per: 'dag' },
       { id: 'k5', naam: 'Aankleden', icon: 'shirt', waarde: 1, keer: 1, per: 'dag' },
       { id: 'k6', naam: 'Speelgoed opruimen', icon: 'blocks', waarde: 1, keer: 1, per: 'dag' },
-      { id: 'k7', naam: 'Helpen met boodschappen', icon: 'bag', waarde: 1, keer: 1, per: 'dag' },
+      { id: 'k7', naam: 'Helpen met boodschappen', icon: 'mand', waarde: 1, keer: 1, per: 'dag' },
       { id: 'k8', naam: 'Huisdier voeren', icon: 'paw', waarde: 1, keer: 1, per: 'dag' }
     ],
     beloningen: [
@@ -240,8 +241,8 @@ function zonderTijdInNaam(st) {
 function metHoeVaak(st) {
   return {
     ...st,
-    // Kamer opruimen deelde het bed-icoon met Bed opmaken en heeft nu een eigen plaatje.
-    klusjes: st.klusjes.map((k) => ({ keer: 1, per: 'dag', ...k, ...(k.id === 'k3' && k.icon === 'bed' ? { icon: 'kamer' } : {}) })),
+    // Kamer opruimen deelde het bed-icoon met Bed opmaken, boodschappen de tas met Schooltas inpakken.
+    klusjes: st.klusjes.map((k) => ({ keer: 1, per: 'dag', ...k, ...(k.id === 'k3' && k.icon === 'bed' ? { icon: 'kamer' } : k.id === 'k7' && k.icon === 'bag' ? { icon: 'mand' } : {}) })),
     beloningen: [...st.beloningen.map((b) => ({ keer: 1, per: 'week', ...b })),
       ...(st.spelErbij || st.beloningen.some((b) => b.spel) ? [] : [beginState().beloningen.find((b) => b.spel)])],
     spelErbij: true,
