@@ -1380,7 +1380,7 @@ function sheetBewerk() {
     : 'Weet je het zeker? Tik nog een keer op Verwijderen. De geschiedenis blijft bewaard.';
   return `<div class="sheet-wrap">
     <button type="button" class="sheet-bg" data-a="editSluit" aria-label="Sluiten"></button>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-ed">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-ed" data-scroll="sh-ed">
       <div class="sh-title" id="sh-ed">${titels[e.soort][e.id ? 1 : 0]}</div>
       <label class="lbl" for="ed-naam">Naam</label>
       <input class="inp" id="ed-naam" data-input="edit.naam" value="${esc(e.naam)}" maxlength="30" autocomplete="off" placeholder="${e.soort === 'kid' ? 'Naam van het kind' : e.soort === 'klus' ? 'Bijv. Planten water geven' : 'Bijv. Samen een spelletje'}">
@@ -1401,7 +1401,7 @@ function sheetGebruiker() {
   const nieuw = !g.id;
   return `<div class="sheet-wrap">
     <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-gb">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-gb" data-scroll="sh-gb">
       <div class="sh-title" id="sh-gb">${nieuw ? 'Gebruiker toevoegen' : 'Gebruiker aanpassen'}</div>
       <label class="lbl" for="gb-naam">Naam</label>
       <input class="inp" id="gb-naam" data-input="gbNaam" value="${esc(s.gbNaam || '')}" maxlength="30" autocomplete="off" placeholder="Bijv. Oma">
@@ -1432,7 +1432,7 @@ function sheetTerugzet() {
   const tablets = !DEMO && s.kids.some((k) => !d.kids.some((n) => n.id === k.id)) ? '<p class="muted" style="margin:0">Een tablet van een kind dat niet in het bestand staat, moet je daarna opnieuw koppelen.</p>' : '';
   return `<div class="sheet-wrap">
     <button type="button" class="sheet-bg" data-a="terugzetWeg" aria-label="Sluiten"></button>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-tz">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-tz" data-scroll="sh-tz">
       <div class="sh-title" id="sh-tz">Gegevens terugzetten?</div>
       <p style="margin:0">Bestand van ${wanneer}: <b>${d.kids.length} ${d.kids.length === 1 ? 'kind' : 'kinderen'}</b> (${esc(d.kids.map((k) => k.naam).join(', '))}),
         ${d.klusjes.length} klusjes, ${d.beloningen.length} beloningen en ${d.tx.length} regels geschiedenis.</p>
@@ -1450,7 +1450,7 @@ function sheetPin() {
   if (!s.sheet || s.sheet.type !== 'pin') return '';
   return `<div class="sheet-wrap">
     <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-pin">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-pin" data-scroll="sh-pin">
       <div class="sh-title" id="sh-pin">Pincode wijzigen</div>
       <label class="lbl" for="pin-oud">Huidige pincode</label>
       <input class="inp" id="pin-oud" type="password" inputmode="numeric" autocomplete="current-password" data-input="pinOud" value="${esc(s.pinOud || '')}">
@@ -1527,7 +1527,7 @@ function sheetKlus() {
   }).join('');
   return `<div class="sheet-wrap">
     <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-klus">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-klus" data-scroll="sh-klus">
       <div class="sh-head">
         <span class="icobox" style="width:48px;height:48px;border-radius:14px">${icon(k.icon, 28)}</span>
         <div><div class="sh-title" id="sh-klus">${k.naam}</div><div class="plus" style="font-size:13px">+${k.waarde} · ${perTekst(k)}</div></div>
@@ -1557,7 +1557,7 @@ function sheetTaak() {
   }).join('');
   return `<div class="sheet-wrap">
     <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-taak">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-taak" data-scroll="sh-taak">
       <div class="sh-head">
         <span class="icobox geel" style="width:48px;height:48px;border-radius:14px">${icon(taak.icon, 28)}</span>
         <div><div class="sh-title" id="sh-taak">${taak.naam}</div><div class="plus" style="font-size:13px">${taak.doel} sterren = +${taak.beloning}</div></div>
@@ -1581,7 +1581,7 @@ function sheetOverig() {
     : 'Weet je het zeker? Dit haalt ' + o.aantal + ' ' + munt(o.aantal) + ' af bij ' + o.kind.naam + '.';
   return `<div class="sheet-wrap">
     <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-ov">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-ov" data-scroll="sh-ov">
       <div class="sh-title" id="sh-ov">Overig</div>
       <div class="pills">
         ${s.kids.map((k) => {
