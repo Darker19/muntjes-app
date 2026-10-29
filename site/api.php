@@ -51,6 +51,8 @@ function out(array $data, int $code = 200) {
 function fail(string $msg, int $code = 400) {
     global $db, $transactie;
     if ($transactie) { $db->exec('ROLLBACK'); $transactie = false; }
+    // Geweigerd? Reden in de serverlog (docker logs), zonder gegevens van het gezin.
+    if ($code === 403) error_log('muntjes ' . $code . ' ' . preg_replace('/[^a-z_]/', '', (string)($_GET['actie'] ?? '')) . ': ' . $msg);
     out(['fout' => $msg], $code);
 }
 
