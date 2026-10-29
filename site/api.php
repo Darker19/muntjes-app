@@ -307,7 +307,12 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
         $week = $fn[$kid]['week'] ?? null;
         $takenIds = array_column($oud['taken'] ?? [], 'id');
         if (!is_array($ids)) return waarom('focus ids', $nee);
-        if (count($ids) > ((int)($oud['maxFocus'] ?? 0) ?: 3) && count($ids) > count($fo[$kid]['ids'] ?? [])) return waarom('focus te veel ' . count($ids), $nee);
+        // Vastgezette taken tellen mee voor het maximum; het kind kiest alleen de rest.
+        $vast = [];
+        foreach ($oud['kids'] ?? [] as $kk) if (($kk['id'] ?? '') === $kid) $vast = array_values(array_intersect(is_array($kk['vast'] ?? null) ? $kk['vast'] : [], $takenIds));
+        $zelf = array_diff($ids, $vast);
+        $ruimte = max(0, (((int)($oud['maxFocus'] ?? 0) ?: 3)) - count($vast));
+        if (count($zelf) > $ruimte && count($zelf) > count(array_diff($fo[$kid]['ids'] ?? [], $vast))) return waarom('focus te veel ' . count($zelf), $nee);
         if (!is_numeric($week) || floor((float)$week) != $week) return waarom('focus week ' . gettype($week), $nee);
         foreach ($ids as $id) if (!in_array($id, $takenIds, true)) return waarom('focus taak '.$id, $nee);
     }
@@ -440,6 +445,7 @@ function samenvatting(array $data, string $kid): ?array {
     $taken = array_column($data['taken'] ?? [], null, 'id');
     $f = $data['focus'][$kid] ?? null;
     $focus = is_array($f) && (int)($f['week'] ?? 0) === $weekStart && is_array($f['ids'] ?? null) ? $f['ids'] : [];
+    $focus = array_values(array_unique(array_merge(is_array($kind['vast'] ?? null) ? $kind['vast'] : [], $focus)));
     $gekozen = [];
     foreach ($focus as $id) {
         if (!isset($taken[$id])) continue;
