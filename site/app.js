@@ -994,7 +994,7 @@ function schermMelden() {
     <button type="button" class="klus" data-a="klusOpen" data-id="${k.id}">
       <span class="icobox">${icon(k.icon, 26)}</span>
       <span class="kl-naam">${k.naam}</span>
-      <span class="plus">+${k.waarde} ${munt(k.waarde)}</span>
+      <span class="plus">+${k.waarde}</span>
       <span class="muted">${perTekst(k)}</span>
     </button>`).join('');
   return `
@@ -1014,7 +1014,7 @@ function schermMelden() {
       <button type="button" class="klus" data-a="taakOpen" data-id="${t.id}">
         <span class="icobox geel">${icon(t.icon, 26)}</span>
         <span class="kl-naam">${t.naam}</span>
-        <span class="plus">${t.doel} ⭐ = +${t.beloning} ${munt(t.beloning)}</span>
+        <span class="plus">${t.doel} ⭐ = +${t.beloning}</span>
       </button>`).join('')}</div>` : ''}`;
 }
 
@@ -1369,7 +1369,7 @@ function sheetKlus() {
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-klus">
       <div class="sh-head">
         <span class="icobox" style="width:48px;height:48px;border-radius:14px">${icon(k.icon, 28)}</span>
-        <div><div class="sh-title" id="sh-klus">${k.naam}</div><div class="plus" style="font-size:13px">+${k.waarde} ${munt(k.waarde)} · ${perTekst(k)}</div></div>
+        <div><div class="sh-title" id="sh-klus">${k.naam}</div><div class="plus" style="font-size:13px">+${k.waarde} · ${perTekst(k)}</div></div>
       </div>
       <div class="lbl">Voor wie?</div>
       <div class="grid2">${kids}</div>
@@ -1399,7 +1399,7 @@ function sheetTaak() {
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-taak">
       <div class="sh-head">
         <span class="icobox geel" style="width:48px;height:48px;border-radius:14px">${icon(taak.icon, 28)}</span>
-        <div><div class="sh-title" id="sh-taak">${taak.naam}</div><div class="plus" style="font-size:13px">${taak.doel} sterren = +${taak.beloning} ${munt(taak.beloning)}</div></div>
+        <div><div class="sh-title" id="sh-taak">${taak.naam}</div><div class="plus" style="font-size:13px">${taak.doel} sterren = +${taak.beloning}</div></div>
       </div>
       <div class="lbl">Wie krijgt een ster?</div>
       <div class="grid2">${kids}</div>
