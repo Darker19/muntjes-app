@@ -1533,11 +1533,12 @@ function renderKind() {
 }
 
 // ---------- feestje: confetti als er iets verdiend is ----------
-// Per tablet onthouden welke goedgekeurde klusjes en voltooide taken al gevierd zijn.
+// Per tablet onthouden welke goedgekeurde klusjes, sterren en voltooide taken al gevierd zijn.
 const GEVIERD = 'muntjes-gevierd';
 let gevierd = null;
 let feestRij = [];
 let feestTimer = null;
+let zoekTimer = null;
 
 function zoekFeest() {
   const kind = kidVan(s.tabletKid);
@@ -1546,14 +1547,17 @@ function zoekFeest() {
     try { gevierd = JSON.parse(localStorage.getItem(GEVIERD) || '{}') || {}; } catch (e) { gevierd = {}; }
   }
   const sleutel = (t) => t.id + ':' + t.ts;
-  const verdiend = s.tx.filter((t) => t.kid === kind.id && t.status === 'goed' && ((t.type === 'klus' && t.amount > 0) || t.type === 'taakklaar'));
+  const verdiend = s.tx.filter((t) => t.kid === kind.id && t.status === 'goed' && ((t.type === 'klus' && t.amount > 0) || t.type === 'ster' || t.type === 'taakklaar'));
   const eerste = !gevierd[kind.id];
   const al = new Set(gevierd[kind.id] || []);
-  const nieuw = eerste ? [] : verdiend.filter((t) => !al.has(sleutel(t)));
+  let nieuw = eerste ? [] : verdiend.filter((t) => !al.has(sleutel(t)));
   if (!eerste && !nieuw.length) return;
   // Alleen bijhouden wat er nog is, zodat de lijst niet blijft groeien.
   gevierd[kind.id] = verdiend.map(sleutel);
   try { localStorage.setItem(GEVIERD, JSON.stringify(gevierd)); } catch (e) { /* negeren */ }
+  // Maakt de laatste ster de taak af? Dan alleen het grote feest van de voltooide taak.
+  const klaar = new Set(nieuw.filter((t) => t.type === 'taakklaar').map((t) => t.ref));
+  nieuw = nieuw.filter((t) => !(t.type === 'ster' && klaar.has(t.ref)));
   if (!nieuw.length) return;
   feestRij.push(...nieuw.sort((a, b) => a.ts - b.ts).map((t) => ({ t, kind })));
   if (!feestTimer && $('#feest').hidden) volgendFeest();
@@ -1568,23 +1572,29 @@ function volgendFeest() {
   const { t, kind } = volgende;
   const v = valuta(kind);
   const taak = t.type === 'taakklaar';
-  const act = taak ? taakVan(t.ref) : klusVan(t.ref);
+  const isSter = t.type === 'ster';
+  const act = taak || isSter ? taakVan(t.ref) : klusVan(t.ref);
+  const n = isSter && act ? Math.min(act.doel, sterTx(kind.id, act.id, 'goed').length) : 0;
+  const beloond = isSter && act
+    ? `<span class="sterrij">${Array.from({ length: act.doel }, (_, i) => ster(40, i < n)).join('')}</span><b class="feest-ster">${n}/${act.doel}</b>`
+    : `${v.icoon(52).repeat(Math.min(5, Math.max(1, t.amount)))}<b>+${t.amount} ${v.woord(t.amount)}</b>`;
   const thema = MASCOTTE[kind.thema] ? kind.thema : 'geen';
   el.innerHTML = `<canvas class="confetti" aria-hidden="true"></canvas>
     <button type="button" class="feest-kaart" data-a="feestWeg" aria-label="Sluiten">
-      <span class="feest-beeld">${thema !== 'geen' ? MASCOTTE[thema](120) : coin(110)}</span>
+      <span class="feest-beeld">${isSter ? ster(110) : thema !== 'geen' ? MASCOTTE[thema](120) : coin(110)}</span>
       <span class="feest-titel" style="color:${{ eenhoorn: '#7C3AED', dino: '#3F6212' }[thema] || kind.kleur}">Hoera, ${esc(kind.naam)}!</span>
-      <span class="feest-tekst">${taak ? 'Je hebt een taak voltooid!' : 'Je hebt een klusje geklaard!'}</span>
+      <span class="feest-tekst">${taak ? 'Je hebt een taak voltooid!' : isSter ? 'Je hebt een ster verdiend!' : 'Je hebt een klusje geklaard!'}</span>
       <span class="feest-wat">${act ? `<span class="ricon">${icon(act.icon, 34, 1.5)}</span>` : ''}${esc(taak ? (act ? act.naam : t.label) : t.label)}</span>
-      <span class="feest-munt">${v.icoon(52).repeat(Math.min(5, Math.max(1, t.amount)))}<b>+${t.amount} ${v.woord(t.amount)}</b></span>
+      <span class="feest-munt">${beloond}</span>
     </button>`;
   el.hidden = false;
-  confetti(el.querySelector('canvas'), thema);
+  confetti(el.querySelector('canvas'), thema, isSter);
   feestTimer = setTimeout(volgendFeest, 5000);
 }
 
-function confetti(canvas, thema) {
-  const kleuren = { eenhoorn: ['#F9A8D4', '#C4B5FD', '#93C5FD', '#FCD34D', '#F472B6'], dino: ['#84CC16', '#FB923C', '#FCD34D', '#65A30D', '#C2410C'], geen: ['#F2B705', '#2457C5', '#22784A', '#E8892B', '#B0306A'] }[thema];
+// Gewone confetti, of (bij een ster) een regen van gouden sterretjes.
+function confetti(canvas, thema, sterren) {
+  const kleuren = sterren ? ['#FBBF24', '#FCD34D', '#F59E0B', '#FDE68A', '#FFF3B0'] : { eenhoorn: ['#F9A8D4', '#C4B5FD', '#93C5FD', '#FCD34D', '#F472B6'], dino: ['#84CC16', '#FB923C', '#FCD34D', '#65A30D', '#C2410C'], geen: ['#F2B705', '#2457C5', '#22784A', '#E8892B', '#B0306A'] }[thema];
   const rust = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const r = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -1601,7 +1611,7 @@ function confetti(canvas, thema) {
     return {
       x: links ? 0 : r.width, y: r.height * 0.85,
       vx: Math.cos(hoek * Math.PI / 180) * snel, vy: Math.sin(hoek * Math.PI / 180) * snel,
-      w: 7 + Math.random() * 7, h: 4 + Math.random() * 6, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4,
+      w: sterren ? 10 + Math.random() * 12 : 7 + Math.random() * 7, h: 4 + Math.random() * 6, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4,
       kleur: kleuren[i % kleuren.length], rond: Math.random() < 0.3
     };
   });
@@ -1622,7 +1632,19 @@ function confetti(canvas, thema) {
       c.translate(p.x, p.y);
       c.rotate(p.rot);
       c.fillStyle = p.kleur;
-      if (p.rond) { c.beginPath(); c.arc(0, 0, p.h / 1.4, 0, 7); c.fill(); }
+      if (sterren) {
+        c.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const straal = i % 2 ? p.w / 4.4 : p.w / 2;
+          const hoek = (i * Math.PI) / 5 - Math.PI / 2;
+          c.lineTo(Math.cos(hoek) * straal, Math.sin(hoek) * straal);
+        }
+        c.closePath();
+        c.fill();
+        c.strokeStyle = '#B45309';
+        c.lineWidth = 1;
+        c.stroke();
+      } else if (p.rond) { c.beginPath(); c.arc(0, 0, p.h / 1.4, 0, 7); c.fill(); }
       else c.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.rot * 2)));
       c.restore();
     });
@@ -1676,7 +1698,8 @@ function render() {
   $('#col-kind').hidden = weergave === 'ouder';
   $('#ouder').innerHTML = weergave === 'kind' ? '' : !DEMO && !volwassene() ? renderWelkom() : renderOuder();
   $('#kind').innerHTML = weergave === 'ouder' ? '' : renderKind();
-  if (weergave !== 'ouder' && (DEMO || rol === 'kind')) zoekFeest();
+  // Even wachten: een ster en de voltooide taak komen vlak na elkaar binnen.
+  if (weergave !== 'ouder' && (DEMO || rol === 'kind')) { clearTimeout(zoekTimer); zoekTimer = setTimeout(zoekFeest, 60); }
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
 
   scrolls.forEach(([k, top]) => { const el = document.querySelector(`[data-scroll="${k}"]`); if (el) el.scrollTop = top; });

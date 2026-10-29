@@ -336,6 +336,8 @@ body.bare .feest { border-radius: 0; }
 .feest-wat { display: flex; align-items: center; gap: 12px; font-family: Fredoka, sans-serif; font-size: 22px; font-weight: 600; }
 .feest-wat .ricon { width: 56px; height: 56px; border-radius: 16px; }
 .feest-munt { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.feest-munt .sterrij { flex-wrap: nowrap; }
+.feest-munt b.feest-ster { color: #B45309; }
 .feest-munt b { font-family: Fredoka, sans-serif; font-size: 28px; font-weight: 600; color: var(--green); margin-left: 8px; }
 @keyframes feest-in { from { opacity: 0; } }
 @keyframes feest-pop { from { transform: scale(.4); opacity: 0; } }
