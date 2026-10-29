@@ -60,7 +60,7 @@ const SPELLEN = [['', 'Geen'], ['https://spelletjes.darkesttimes.nl/', 'Flesjes 
 const spelNaam = (url) => (SPELLEN.find(([u]) => u === url) || [url, 'Spelletje'])[1];
 
 // Getekende plaatjes voor de kind-app, per thema. Iconen zonder plaatje blijven een lijnicoon.
-const PLAATJES = { plate: 'tafel-dekken', table: 'tafel-afruimen', kamer: 'kamer-opruimen', tooth: 'tanden-poetsen', tablet: 'tablet', game: 'spelletje' };
+const PLAATJES = { plate: 'tafel-dekken', table: 'tafel-afruimen', blocks: 'speelgoed-opruimen', tooth: 'tanden-poetsen', tablet: 'tablet', game: 'spelletje' };
 const PLAATJE_MAP = { geen: 'neutral', eenhoorn: 'unicorn', dino: 'dinosaurus' };
 const plaatje = (d, thema, size, sw) => (PLAATJES[d] ? `<img class="ill" src="img/${PLAATJE_MAP[thema] || 'neutral'}/${PLAATJES[d]}.webp" width="${size}" height="${size}" alt="">` : icon(d, size, sw));
 
