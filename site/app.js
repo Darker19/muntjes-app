@@ -786,6 +786,30 @@ const acties = {
     melding(r.ok ? 'Testmelding verstuurd' : r.data.fout || 'Geen verbinding met de server.');
   },
 
+  // Gegevens: exporteren naar een bestand en terugzetten
+  exporteer() {
+    const d = new Date();
+    const datum = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    const inhoud = JSON.stringify({ app: 'muntjes', formaat: 1, gemaakt: d.toISOString(), data: dataVan(s) }, null, 2);
+    const url = URL.createObjectURL(new Blob([inhoud], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'muntjes-' + datum + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    melding('Bestand opgeslagen: muntjes-' + datum + '.json');
+  },
+  terugzetOk() {
+    if (!terugzet || !magBeheren()) return;
+    const data = terugzet.data;
+    terugzet = null;
+    zet({ ...data, sheet: null, tabletKid: DEMO ? (data.kids[0] || {}).id || null : s.tabletKid });
+    melding('Gegevens teruggezet');
+  },
+  terugzetWeg() { terugzet = null; zet({ sheet: null }); },
+
   // Inloggen, tablet koppelen en pincode (echte app)
   welkom(d) { zet({ login: { stap: 'pin', doel: d.id, pin: '', fout: '' } }); },
   terug() { zet({ login: { stap: 'kies', pin: '', fout: '' } }); },
@@ -910,6 +934,25 @@ const acties = {
   }
 };
 
+// Bestand om terug te zetten: eerst controleren en laten bevestigen.
+let terugzet = null;
+function leesTerugzet(tekst) {
+  let j;
+  try { j = JSON.parse(tekst); } catch (e) { return 'Dit is geen Muntjes-bestand.'; }
+  const d = j && j.app === 'muntjes' && j.data;
+  if (!d || !Array.isArray(d.kids) || !Array.isArray(d.klusjes) || !Array.isArray(d.beloningen) || !Array.isArray(d.tx)) return 'Dit is geen Muntjes-bestand.';
+  const basis = startData();
+  const data = Object.fromEntries(DATA_KEYS.map((k) => [k, d[k] === undefined ? basis[k] : d[k]]));
+  // Namen schoonmaken zoals bij opslaan in Beheer (ze komen onge-escaped in de app).
+  const schoon = (lijst) => (Array.isArray(lijst) ? lijst : []).filter((x) => x && typeof x === 'object')
+    .map((x) => ({ ...x, naam: String(x.naam ?? '').replace(/[<>&"]/g, '').trim().slice(0, 30) || '?' }));
+  ['kids', 'klusjes', 'beloningen', 'taken'].forEach((k) => { data[k] = schoon(data[k]); });
+  data.tx = data.tx.filter((t) => t && typeof t === 'object');
+  data.nextId = Math.max(Number(data.nextId) || 1, ...data.tx.map((t) => Number(t.id) + 1 || 1));
+  terugzet = { data, gemaakt: j.gemaakt };
+  return '';
+}
+
 function overigInfo() {
   const kind = kidVan(s.ovKid);
   const isMin = s.ovSign < 0;
@@ -972,7 +1015,7 @@ function renderOuder() {
         </button>`).join('')}
     </nav>
     ${s.toast ? `<div class="toast" role="status">${coin(22)}<span>${esc(s.toast)}</span></div>` : ''}
-    ${sheetKlus()}${sheetTaak()}${sheetOverig()}${sheetBewerk()}${sheetPin()}${sheetGebruiker()}`;
+    ${sheetKlus()}${sheetTaak()}${sheetOverig()}${sheetBewerk()}${sheetPin()}${sheetGebruiker()}${sheetTerugzet()}`;
 }
 
 function schermMelden() {
@@ -1156,6 +1199,12 @@ function schermBeheer() {
         : `<button type="button" class="lrij" data-a="pinOpen"><span class="grow">Mijn pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>`}
     </div>
     ${pushBlok()}
+    <h2 class="sec">Gegevens</h2>
+    <div class="lijst">
+      <button type="button" class="lrij" data-a="exporteer"><span class="col"><span>Exporteren</span><small>Alle kinderen, kaarten, taken en geschiedenis als bestand (zonder pincodes)</small></span>${icon(IC.chev, 18, 2)}</button>
+      <label class="lrij" style="cursor:pointer"><span class="col"><span>Terugzetten uit een bestand</span><small>Vervangt alles wat nu in de app staat</small></span>${icon(IC.chev, 18, 2)}
+        <input type="file" accept="application/json,.json" data-bestand="terugzet" hidden></label>
+    </div>
     ${DEMO ? '' : `
     <h2 class="sec">Gebruikers</h2>
     <p class="sec-sub">Iedereen logt in met een eigen pincode. Ouders mogen alles; familie mag klusjes melden, muntjes geven en aanvragen goedkeuren.</p>
@@ -1280,6 +1329,28 @@ function sheetGebruiker() {
         ${nieuw ? '' : '<button type="button" class="btn btn-stop" data-a="gebruikerWeg">Verwijderen</button>'}
         <button type="button" class="btn btn-soft" data-a="sluit">Annuleren</button>
         <button type="button" class="btn wide btn-primary" data-a="gebruikerOpslaan">Opslaan</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function sheetTerugzet() {
+  if (!s.sheet || s.sheet.type !== 'terugzet' || !terugzet) return '';
+  const d = terugzet.data;
+  const w = terugzet.gemaakt ? new Date(terugzet.gemaakt) : null;
+  const wanneer = w && !isNaN(w) ? w.getDate() + '-' + (w.getMonth() + 1) + '-' + w.getFullYear() + ' ' + pad(w.getHours()) + ':' + pad(w.getMinutes()) : 'onbekende datum';
+  const tablets = !DEMO && s.kids.some((k) => !d.kids.some((n) => n.id === k.id)) ? '<p class="muted" style="margin:0">Een tablet van een kind dat niet in het bestand staat, moet je daarna opnieuw koppelen.</p>' : '';
+  return `<div class="sheet-wrap">
+    <button type="button" class="sheet-bg" data-a="terugzetWeg" aria-label="Sluiten"></button>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-tz">
+      <div class="sh-title" id="sh-tz">Gegevens terugzetten?</div>
+      <p style="margin:0">Bestand van ${wanneer}: <b>${d.kids.length} ${d.kids.length === 1 ? 'kind' : 'kinderen'}</b> (${esc(d.kids.map((k) => k.naam).join(', '))}),
+        ${d.klusjes.length} klusjes, ${d.beloningen.length} beloningen en ${d.tx.length} regels geschiedenis.</p>
+      <div class="warn">Dit vervangt <b>alles</b> wat nu in de app staat, ook op de tablets. Exporteer eerst de huidige gegevens als je die wilt bewaren.</div>
+      ${tablets}
+      <div class="flex">
+        <button type="button" class="btn btn-soft" data-a="terugzetWeg">Annuleren</button>
+        <button type="button" class="btn wide btn-red" data-a="terugzetOk">Ja, terugzetten</button>
       </div>
     </div>
   </div>`;
@@ -1837,6 +1908,14 @@ document.addEventListener('input', (e) => {
   s = { ...s, [veld]: e.target.value, ovZeker: veld === 'ovReden' ? false : s.ovZeker };
   bewaar();
   if (veld === 'ovReden') render();
+});
+
+document.addEventListener('change', async (e) => {
+  if (!e.target.dataset || e.target.dataset.bestand !== 'terugzet' || !e.target.files[0]) return;
+  const fout = leesTerugzet(await e.target.files[0].text());
+  e.target.value = '';
+  if (fout) { melding(fout); return; }
+  zet({ sheet: { type: 'terugzet' } });
 });
 
 document.addEventListener('keydown', (e) => {
