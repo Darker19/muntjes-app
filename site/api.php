@@ -102,6 +102,12 @@ try {
         pin_hash TEXT NOT NULL,
         aangemaakt INTEGER NOT NULL
     )');
+    // Regels die uit de geschiedenis verdwijnen (samengevoegd of met een kind verwijderd) blijven hier bewaard.
+    $db->exec('CREATE TABLE IF NOT EXISTS archief (
+        id INTEGER PRIMARY KEY,
+        tx TEXT NOT NULL,
+        weg INTEGER NOT NULL
+    )');
     $db->exec('CREATE TABLE IF NOT EXISTS push (
         id INTEGER PRIMARY KEY,
         gebruiker INTEGER NOT NULL,
@@ -462,7 +468,7 @@ function samenvatting(array $data, string $kid): ?array {
             $open++;
             if ($bedrag < 0) $gereserveerd -= $bedrag;
         }
-        if ($status !== 'afgewezen' && (!$laatste || ($t['ts'] ?? 0) > $laatste['ts'])) {
+        if ($status !== 'afgewezen' && ($t['type'] ?? '') !== 'begin' && (!$laatste || ($t['ts'] ?? 0) > $laatste['ts'])) {
             $laatste = ['label' => (string)($t['label'] ?? ''), 'bedrag' => $bedrag, 'status' => $status, 'ts' => (int)($t['ts'] ?? 0)];
         }
     }
@@ -572,6 +578,28 @@ function speel_sleutel(string $timerId): string {
     $geheim = instelling('speel_geheim');
     if ($geheim === null) { $geheim = bin2hex(random_bytes(32)); zet_instelling('speel_geheim', $geheim); }
     return substr(hash_hmac('sha256', 'speeltijd:' . $timerId, $geheim), 0, 32);
+}
+
+// Na het opslaan door een ouder: verdwenen geschiedenis in het archief zetten (niet de eigen
+// aanvragen die een kind intrekt; die komen via de tablet), en tablets en widgets van een
+// verwijderd kind ontkoppelen.
+function opruimen(array $oud, array $nieuw): void {
+    global $db;
+    $nieuwIds = [];
+    foreach ($nieuw['tx'] ?? [] as $t) if (is_array($t) && isset($t['id'])) $nieuwIds[(string)$t['id']] = true;
+    $bewaar = $db->prepare('INSERT INTO archief (tx, weg) VALUES (?, ?)');
+    foreach ($oud['tx'] ?? [] as $t) {
+        if (!is_array($t) || !isset($t['id']) || isset($nieuwIds[(string)$t['id']])) continue;
+        if (($t['status'] ?? '') === 'aangevraagd') continue;
+        $bewaar->execute([json_encode($t, JSON_UNESCAPED_UNICODE), time()]);
+    }
+    $kids = array_column(is_array($nieuw['kids'] ?? null) ? $nieuw['kids'] : [], 'id');
+    foreach (is_array($oud['kids'] ?? null) ? $oud['kids'] : [] as $k) {
+        $id = (string)($k['id'] ?? '');
+        if ($id === '' || in_array($id, $kids, true)) continue;
+        $db->prepare('DELETE FROM apparaten WHERE kid = ?')->execute([$id]);
+        $db->prepare('DELETE FROM widgets WHERE kid = ?')->execute([$id]);
+    }
 }
 
 function gebruikers_lijst(): array {
@@ -686,6 +714,7 @@ switch ($actie) {
         $db->prepare('INSERT INTO staat (id, versie, data, bijgewerkt) VALUES (1, ?, ?, ?)
                       ON CONFLICT(id) DO UPDATE SET versie = excluded.versie, data = excluded.data, bijgewerkt = excluded.bijgewerkt')
            ->execute([$huidig + 1, $data, time()]);
+        if ($s && $w['rol'] === 'ouder') opruimen(json_decode($s['data'], true), $in['data']);
         $db->exec('COMMIT');
         $transactie = false;
         // Pas na het antwoord de widgets een seintje geven, zodat opslaan niet trager wordt.

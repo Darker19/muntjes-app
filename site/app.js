@@ -72,6 +72,7 @@ const MASCOTTE = Object.fromEntries(Object.entries(MASCOTTE_PLAATJE).map(([thema
 const UUR = 3600e3;
 const DAG = 24 * UUR;
 const DAGEN = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
+const MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
 // ---------- hulpjes ----------
 const $ = (sel) => document.querySelector(sel);
@@ -399,6 +400,7 @@ async function start() {
     synchroniseer();
   }
   geladen = true;
+  if (rol === 'ouder') zet((st) => samenvoegen(st));
   if (rol === 'ouder' && s.scherm === 'beheer') laadBeheer();
   if (volwassene()) {
     if (PARAMS.get('scherm') === 'timers') s = { ...s, scherm: 'timers' };
@@ -459,6 +461,38 @@ function stats(kid) {
   const gereserveerd = mijn.filter((t) => t.status === 'aangevraagd' && t.amount < 0).reduce((a, t) => a - t.amount, 0);
   const week = mijn.filter((t) => dezeWeek(t) && t.status === 'goed' && t.type === 'klus').reduce((a, t) => a + t.amount, 0);
   return { saldo, gereserveerd, beschikbaar: saldo - gereserveerd, week };
+}
+
+// Oude geschiedenis samenvoegen: alles wat ouder is dan BEWAAR_DAGEN wordt per kind één regel
+// "beginsaldo", zodat de gegevens niet blijven groeien. Openstaande aanvragen blijven staan,
+// en alles van deze week (weekmaximum, sterren, "hoe vaak") ook. De server bewaart de oude regels in een archief.
+const BEWAAR_DAGEN = 90;
+function samenvoegen(st) {
+  const grens = Math.min(Date.now() - BEWAAR_DAGEN * DAG, weekStart(), dagStart());
+  const oud = st.tx.filter((t) => t.ts < grens && t.status !== 'aangevraagd');
+  // Pas samenvoegen als het de moeite waard is (en niet alleen een eerdere beginregel).
+  if (oud.filter((t) => t.type !== 'begin').length < 50) return {};
+  const weg = new Set(oud.map((t) => t.id));
+  let nextId = st.nextId;
+  const datum = new Date(Math.max(...oud.map((t) => t.ts)));
+  const begin = [...new Set(oud.map((t) => t.kid))].map((kid) => {
+    const mijn = oud.filter((t) => t.kid === kid);
+    return {
+      id: nextId++, kid, type: 'begin', ref: null, label: 'Saldo t/m ' + datum.getDate() + ' ' + MAANDEN[datum.getMonth()] + ' ' + datum.getFullYear(),
+      amount: mijn.filter((t) => t.status === 'goed').reduce((a, t) => a + t.amount, 0),
+      status: 'goed', bron: 'ouder', door: '', ts: Math.max(...mijn.map((t) => t.ts)), msg: '', regels: mijn.reduce((a, t) => a + (t.regels || 1), 0)
+    };
+  });
+  return { tx: [...st.tx.filter((t) => !weg.has(t.id)), ...begin], nextId };
+}
+
+// Staat de aanvraag nog open? Een ander apparaat kan hem net hebben ingetrokken of afgehandeld;
+// dat blijkt pas als de server onze wijziging terugstuurt en we hem opnieuw uitvoeren.
+function nogOpen(st, id) {
+  const t = st.tx.find((x) => x.id === id);
+  if (t && t.status === 'aangevraagd') return true;
+  setTimeout(() => melding(t ? 'Iemand anders heeft deze aanvraag al afgehandeld' : 'Deze aanvraag is net ingetrokken'), 0);
+  return false;
 }
 
 const openMeldingen = (kid) => s.tx.filter((t) => t.kid === kid && t.type === 'klus' && t.status === 'aangevraagd').reduce((a, t) => a + t.amount, 0);
@@ -692,6 +726,7 @@ const acties = {
     const ok = d.x === 'ja';
     const t = s.tx.find((x) => String(x.id) === d.id);
     if (!t) return;
+    if (t.status !== 'aangevraagd') { melding('Deze aanvraag is al afgehandeld'); return; }
     const kid = kidVan(t.kid);
     const isKlus = t.type === 'klus';
     if (ok && isKlus && stats(t.kid).week + t.amount > s.maxWeek) {
@@ -700,17 +735,19 @@ const acties = {
     }
     if (t.type === 'ster') {
       const taak = taakVan(t.ref, t.kid);
-      if (ok && taak && (taakKlaar(t.kid, t.ref) || sterTx(t.kid, t.ref, 'goed').length >= taak.doel)) { melding(t.label + ' is al voltooid deze week'); return; }
-      zet((st) => ({ tx: st.tx.map((x) => (x.id === t.id ? { ...x, status: ok ? 'goed' : 'afgewezen', beslistDoor: mijnNaam() } : x)) }));
+      if (ok && !taak) { melding('Deze taak staat uit voor ' + kid.naam + ' (of bestaat niet meer). Je kunt de melding alleen afwijzen.'); return; }
+      if (ok && (taakKlaar(t.kid, t.ref) || sterTx(t.kid, t.ref, 'goed').length >= taak.doel)) { melding(t.label + ' is al voltooid deze week'); return; }
+      zet((st) => (nogOpen(st, t.id) ? { tx: st.tx.map((x) => (x.id === t.id ? { ...x, status: ok ? 'goed' : 'afgewezen', beslistDoor: mijnNaam() } : x)) } : {}));
       if (ok) zet((st) => voltooi(st, t.kid, t.ref));
       melding(ok ? (taakKlaar(t.kid, t.ref) ? kid.naam + ' heeft "' + t.label + '" voltooid!' : '⭐ voor ' + kid.naam + ' · ' + t.label) : kid.naam + ': ster niet gegeven');
       return;
     }
     const b = isKlus ? null : belVan(t.ref);
-    zet((st) => ({
+    zet((st) => (nogOpen(st, t.id) ? {
       tx: st.tx.map((x) => (x.id === t.id ? { ...x, status: ok ? 'goed' : 'afgewezen', beslistDoor: mijnNaam() } : x)),
-      timers: ok && b && b.duur ? [...st.timers, { id: 't' + t.id, kid: t.kid, ref: b.id, naam: b.naam, totaal: b.duur * 60, rest: b.duur * 60, status: 'wacht', eind: null }] : st.timers
-    }));
+      timers: ok && b && b.duur && !st.timers.some((x) => x.id === 't' + t.id)
+        ? [...st.timers, { id: 't' + t.id, kid: t.kid, ref: b.id, naam: b.naam, totaal: b.duur * 60, rest: b.duur * 60, status: 'wacht', eind: null }] : st.timers
+    } : {}));
     if (isKlus) melding(ok ? '+' + t.amount + ' voor ' + kid.naam + ' · ' + t.label : kid.naam + ': melding afgewezen');
     else melding(ok ? kid.naam + ': ' + t.label + ' goedgekeurd' + (b && b.duur ? ' · timer klaar' : '') : kid.naam + ': afgewezen, muntjes terug');
   },
@@ -1716,17 +1753,18 @@ function renderKind() {
     const rood = t.type === 'overig' && t.amount < 0;
     const rij = rood ? ' rood' : t.status === 'aangevraagd' ? ' wacht' : t.status === 'afgewezen' ? ' af' : '';
     const kleur = t.status === 'aangevraagd' ? 'wachtc' : t.status === 'afgewezen' ? 'afc' : t.amount < 0 ? 'neg' : 'pos';
-    const door = (t.bron === 'kind' ? (t.type === 'beloning' ? 'zelf aangevraagd' : 'zelf gemeld') : 'door ' + (t.door || 'papa'))
+    const door = t.type === 'begin' ? 'alles van daarvoor bij elkaar'
+      : (t.bron === 'kind' ? (t.type === 'beloning' ? 'zelf aangevraagd' : 'zelf gemeld') : 'door ' + (t.door || 'papa'))
       + (t.beslistDoor && t.status !== 'aangevraagd' ? (t.status === 'goed' ? ', goedgekeurd door ' : ', afgewezen door ') + t.beslistDoor : '');
     const status = t.status === 'aangevraagd' ? (t.amount < 0 ? 'gereserveerd' : 'wacht op goedkeuring') : t.status === 'afgewezen' ? (t.amount < 0 ? 'afgewezen, terug' : 'niet goedgekeurd') : '';
     return `<div class="lrow${rij}">
       <span class="lico">${plaatje(ic, thema, 24)}</span>
       <div class="ltxt">
         <b>${esc(t.label)}</b>
-        <span class="muted">${door} · ${tijdLabel(t.ts)}</span>
+        <span class="muted">${esc(door)}${t.type === 'begin' ? '' : ' · ' + tijdLabel(t.ts)}</span>
         ${t.msg ? `<q>${esc(t.msg)}</q>` : ''}
       </div>
-      <div class="lamt"><span class="n ${kleur}">${t.type === 'ster' ? '+1' + ster(20, t.status !== 'afgewezen') : (t.amount > 0 ? '+' : '−') + Math.abs(t.amount)}</span><span class="muted">${status}</span></div>
+      <div class="lamt"><span class="n ${kleur}">${t.type === 'ster' ? '+1' + ster(20, t.status !== 'afgewezen') : t.type === 'begin' ? t.amount : (t.amount > 0 ? '+' : '−') + Math.abs(t.amount)}</span><span class="muted">${status}</span></div>
     </div>`;
   }).join('');
 
