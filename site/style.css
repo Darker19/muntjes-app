@@ -128,6 +128,7 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 .lrij:last-child { border-bottom: 0; }
 .lrij .r { color: var(--muted); font-size: 12px; font-weight: 700; }
 .lrij .col { flex: 1; display: flex; flex-direction: column; }
+.keuze { min-height: 40px; padding: 0 12px; border-radius: 12px; border: 2px solid var(--line); background: #fff; font: inherit; font-weight: 800; color: var(--ink); }
 .lrij .col small { font-size: 12px; font-weight: 700; color: var(--muted); }
 .switch { width: 48px; height: 28px; border-radius: 14px; padding: 3px; display: flex; flex-shrink: 0; background: #AEB6C1; justify-content: flex-start; }
 .switch.on { background: var(--accent); justify-content: flex-end; }

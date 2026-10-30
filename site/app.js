@@ -124,12 +124,13 @@ const valuta = (kid) => {
 };
 const avatar = (k, size = 28) => `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;background:${k.kleur}" aria-hidden="true">${k.naam[0]}</span>`;
 
-// De week begint op maandag of zaterdag (instelling weekBegin, 1 = maandag, 6 = zaterdag).
-const WEEKBEGIN = [[1, 'Maandag', 'maandag t/m zondag'], [6, 'Zaterdag', 'zaterdag t/m vrijdag']];
+// Op welke dag de week begint (instelling weekBegin, 0 = zondag … 6 = zaterdag, standaard maandag).
+const WEEKDAGEN = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+const weekBeginVan = (st) => (Number.isInteger(st && st.weekBegin) && st.weekBegin >= 0 && st.weekBegin <= 6 ? st.weekBegin : 1);
 function weekStart() {
   const d = new Date();
   let begin = 1;
-  try { if (s && s.weekBegin === 6) begin = 6; } catch { /* s bestaat nog niet tijdens het laden */ }
+  try { begin = weekBeginVan(s); } catch { /* s bestaat nog niet tijdens het laden */ }
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() - begin + 7) % 7)).getTime();
 }
 const dezeWeek = (t) => t.ts >= weekStart();
@@ -730,7 +731,6 @@ const acties = {
   },
   maxFocus(d) { zet({ maxFocus: Math.min(5, Math.max(1, (s.maxFocus || 3) + (d.x === '+' ? 1 : -1))) }); },
   meldToggle(d) { zet((st) => ({ kindMelden: { ...st.kindMelden, [d.id]: !st.kindMelden[d.id] } })); },
-  weekBegin(d) { zet({ weekBegin: Number(d.id) === 6 ? 6 : 1 }); },
   maxWeek(d) { zet({ maxWeek: Math.min(30, Math.max(1, s.maxWeek + (d.x === '+' ? 1 : -1))) }); },
 
   // Beheer: kinderen, klusjes en beloningen
@@ -1279,9 +1279,10 @@ function schermBeheer() {
         <span class="stepnum sm" aria-live="polite">${s.maxFocus || 3}</span>
         <button type="button" class="stepbtn sm" aria-label="Meer" data-a="maxFocus" data-x="+">+</button>
       </div>
-      <div class="lrij" style="flex-wrap:wrap;padding:12px 0">
-        <span class="col" style="flex-basis:100%"><span>Week begint op</span><small>Dan beginnen het weekmaximum, de sterren, de gekozen taken en de beloningen per week opnieuw. Nu: ${WEEKBEGIN.find((w) => w[0] === (s.weekBegin === 6 ? 6 : 1))[2]}.</small></span>
-        <div class="grid2" style="gap:8px;width:100%">${WEEKBEGIN.map(([n, naam]) => `<button type="button" class="seg${(s.weekBegin === 6 ? 6 : 1) === n ? ' on' : ''}" aria-pressed="${(s.weekBegin === 6 ? 6 : 1) === n}" data-a="weekBegin" data-id="${n}">${naam}</button>`).join('')}</div>
+      <div class="lrij" style="flex-wrap:wrap;padding:10px 0">
+        <label class="grow" for="weekBegin">Week begint op</label>
+        <select id="weekBegin" class="keuze" data-instelling="weekBegin">${[1, 2, 3, 4, 5, 6, 0].map((n) => `<option value="${n}"${weekBeginVan(s) === n ? ' selected' : ''}>${WEEKDAGEN[n][0].toUpperCase() + WEEKDAGEN[n].slice(1)}</option>`).join('')}</select>
+        <small class="muted" style="flex-basis:100%;font-size:12px">Week loopt van ${WEEKDAGEN[weekBeginVan(s)]} t/m ${WEEKDAGEN[(weekBeginVan(s) + 6) % 7]}. Dan beginnen het weekmaximum, de sterren, de gekozen taken en de beloningen per week opnieuw.</small>
       </div>
       ${DEMO
         ? '<div class="lrij"><span class="grow">Pincode</span><span class="r">Alleen in de echte app</span></div>'
@@ -2136,6 +2137,7 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', async (e) => {
+  if (e.target.dataset && e.target.dataset.instelling === 'weekBegin') { zet({ weekBegin: Number(e.target.value) }); return; }
   if (!e.target.dataset || e.target.dataset.bestand !== 'terugzet' || !e.target.files[0]) return;
   const fout = leesTerugzet(await e.target.files[0].text());
   e.target.value = '';

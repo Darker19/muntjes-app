@@ -412,9 +412,9 @@ function familie_fout(array $oud, array $nieuw, string $naam): ?string {
 
 /* ---- widget ---- */
 
-// Begin van de huidige week in ms, net als weekStart() in de app (maandag of zaterdag).
+// Begin van de huidige week in ms, net als weekStart() in de app (weekBegin: 0 = zondag … 6 = zaterdag).
 function week_start(array $data): int {
-    $begin = (int)($data['weekBegin'] ?? 1) === 6 ? 6 : 1;
+    $begin = is_int($data['weekBegin'] ?? null) && $data['weekBegin'] >= 0 && $data['weekBegin'] <= 6 ? $data['weekBegin'] : 1;
     $terug = ((int)date('w') - $begin + 7) % 7;
     return strtotime("today -$terug days") * 1000;
 }
