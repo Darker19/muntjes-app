@@ -1114,7 +1114,8 @@ function schermMelden() {
     const st = stats(k.id);
     return `<div class="kcard">
       <div class="kname">${avatar(k)}<b>${k.naam}</b></div>
-      <div class="kbal">${valuta(k).icoon(22)}<span class="num">${st.beschikbaar}</span><span>${valuta(k).woord(st.beschikbaar)}</span></div>
+      <div class="kbal">${valuta(k).icoon(22)}<span class="num">${st.beschikbaar}</span><span>${valuta(k).woord(st.beschikbaar)}</span>
+        ${(s.taken || []).length ? `<span class="kster" role="img" aria-label="${sterrenDezeWeek(k.id)} ${sterrenDezeWeek(k.id) === 1 ? 'ster' : 'sterren'} deze week">${ster(20)}<b>${sterrenDezeWeek(k.id)}</b></span>` : ''}</div>
       <div class="muted">Deze week ${st.week}/${s.maxWeek} verdiend</div>
     </div>`;
   }).join('');
