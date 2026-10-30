@@ -412,12 +412,19 @@ function familie_fout(array $oud, array $nieuw, string $naam): ?string {
 
 /* ---- widget ---- */
 
+// Begin van de huidige week in ms, net als weekStart() in de app (maandag of zaterdag).
+function week_start(array $data): int {
+    $begin = (int)($data['weekBegin'] ?? 1) === 6 ? 6 : 1;
+    $terug = ((int)date('w') - $begin + 7) % 7;
+    return strtotime("today -$terug days") * 1000;
+}
+
 // Wat de widget van één kind laat zien. Rekent hetzelfde als de app (saldo min gereserveerd).
 function samenvatting(array $data, string $kid): ?array {
     $kind = null;
     foreach ($data['kids'] ?? [] as $k) if (($k['id'] ?? '') === $kid) $kind = $k;
     if (!$kind) return null;
-    $weekStart = strtotime('monday this week 00:00') * 1000;
+    $weekStart = week_start($data);
     $saldo = 0; $gereserveerd = 0; $open = 0; $week = 0; $laatste = null;
     $sterren = 0; $perTaak = []; $voltooid = [];
     foreach ($data['tx'] ?? [] as $t) {

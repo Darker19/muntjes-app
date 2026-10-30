@@ -372,6 +372,29 @@ body.bare .vlieg-laag { border-radius: 0; }
   .log { max-height: 440px; }
   .t-right { overflow: visible; padding-right: 0; }
 }
+/* Tablet zelf (schermvullend): kop, saldo en logboek blijven staan, alleen de kaarten scrollen */
+@media (max-width: 1100px) {
+  body.bare .tablet { height: calc(100dvh - var(--barh)); }
+  body.bare .t-right { overflow-y: auto; padding-right: 4px; }
+  body.bare .log { max-height: none; }
+}
+@media (min-width: 761px) and (max-width: 1100px) {
+  body.bare .t-grid { grid-template-columns: 300px minmax(0, 1fr); }
+  body.bare .rgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.bare .saldo-num { font-size: 64px; }
+  body.bare .saldo-deco { transform: scale(.6); transform-origin: right bottom; }
+}
+@media (max-width: 760px) {
+  body.bare .t-grid { grid-template-rows: auto minmax(0, 1fr); }
+  body.bare .t-left { flex-direction: row; height: clamp(170px, 26dvh, 300px); }
+  body.bare .saldo { flex: 0 0 auto; width: min(340px, 48%); }
+  body.bare .log { padding: 16px; }
+}
+@media (max-width: 520px) {
+  body.bare .t-left { flex-direction: column; height: auto; }
+  body.bare .saldo { width: auto; }
+  body.bare .log { height: 150px; flex: 0 0 auto; }
+}
 @media (max-width: 720px) {
   .feest { border-radius: 24px; }
   .feest-titel { font-size: 30px; }

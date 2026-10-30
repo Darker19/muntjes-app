@@ -8,7 +8,7 @@
 
 const PARAMS = new URLSearchParams(location.search);
 const DEMO = PARAMS.has('demo') || (!PARAMS.has('echt') && (/github\.io$/.test(location.hostname) || ['localhost', '127.0.0.1', ''].includes(location.hostname)));
-const DATA_KEYS = ['kids', 'klusjes', 'beloningen', 'taken', 'focus', 'maxFocus', 'tx', 'timers', 'kindMelden', 'maxWeek', 'nextId'];
+const DATA_KEYS = ['kids', 'klusjes', 'beloningen', 'taken', 'focus', 'maxFocus', 'tx', 'timers', 'kindMelden', 'maxWeek', 'weekBegin', 'nextId'];
 const TOKEN_SLEUTEL = 'muntjes-apparaat';
 
 const IC = {
@@ -124,9 +124,13 @@ const valuta = (kid) => {
 };
 const avatar = (k, size = 28) => `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;background:${k.kleur}" aria-hidden="true">${k.naam[0]}</span>`;
 
+// De week begint op maandag of zaterdag (instelling weekBegin, 1 = maandag, 6 = zaterdag).
+const WEEKBEGIN = [[1, 'Maandag', 'maandag t/m zondag'], [6, 'Zaterdag', 'zaterdag t/m vrijdag']];
 function weekStart() {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).getTime();
+  let begin = 1;
+  try { if (s && s.weekBegin === 6) begin = 6; } catch { /* s bestaat nog niet tijdens het laden */ }
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() - begin + 7) % 7)).getTime();
 }
 const dezeWeek = (t) => t.ts >= weekStart();
 function dagStart() {
@@ -255,7 +259,7 @@ function metHoeVaak(st) {
 // Begin van de echte app: standaardklusjes en -beloningen, nog geen kinderen.
 function startData() {
   const b = beginState();
-  return { kids: [], klusjes: b.klusjes, beloningen: b.beloningen, taken: b.taken, focus: {}, maxFocus: 3, tx: [], timers: [], kindMelden: {}, maxWeek: 7, nextId: 1 };
+  return { kids: [], klusjes: b.klusjes, beloningen: b.beloningen, taken: b.taken, focus: {}, maxFocus: 3, tx: [], timers: [], kindMelden: {}, maxWeek: 7, weekBegin: 1, nextId: 1 };
 }
 const dataVan = (st) => Object.fromEntries(DATA_KEYS.map((k) => [k, st[k]]));
 
@@ -726,6 +730,7 @@ const acties = {
   },
   maxFocus(d) { zet({ maxFocus: Math.min(5, Math.max(1, (s.maxFocus || 3) + (d.x === '+' ? 1 : -1))) }); },
   meldToggle(d) { zet((st) => ({ kindMelden: { ...st.kindMelden, [d.id]: !st.kindMelden[d.id] } })); },
+  weekBegin(d) { zet({ weekBegin: Number(d.id) === 6 ? 6 : 1 }); },
   maxWeek(d) { zet({ maxWeek: Math.min(30, Math.max(1, s.maxWeek + (d.x === '+' ? 1 : -1))) }); },
 
   // Beheer: kinderen, klusjes en beloningen
@@ -1273,6 +1278,10 @@ function schermBeheer() {
         <button type="button" class="stepbtn sm" aria-label="Minder" data-a="maxFocus" data-x="-">−</button>
         <span class="stepnum sm" aria-live="polite">${s.maxFocus || 3}</span>
         <button type="button" class="stepbtn sm" aria-label="Meer" data-a="maxFocus" data-x="+">+</button>
+      </div>
+      <div class="lrij" style="flex-wrap:wrap;padding:12px 0">
+        <span class="col" style="flex-basis:100%"><span>Week begint op</span><small>Dan beginnen het weekmaximum, de sterren, de gekozen taken en de beloningen per week opnieuw. Nu: ${WEEKBEGIN.find((w) => w[0] === (s.weekBegin === 6 ? 6 : 1))[2]}.</small></span>
+        <div class="grid2" style="gap:8px;width:100%">${WEEKBEGIN.map(([n, naam]) => `<button type="button" class="seg${(s.weekBegin === 6 ? 6 : 1) === n ? ' on' : ''}" aria-pressed="${(s.weekBegin === 6 ? 6 : 1) === n}" data-a="weekBegin" data-id="${n}">${naam}</button>`).join('')}</div>
       </div>
       ${DEMO
         ? '<div class="lrij"><span class="grow">Pincode</span><span class="r">Alleen in de echte app</span></div>'
