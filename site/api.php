@@ -339,7 +339,7 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
         if (!gelijk($a, $b) || ($t['kid'] ?? '') !== $kid || ($n[$id]['gezien'] ?? false) !== true) return waarom('tx gewijzigd '.$id, $nee);
     }
 
-    $klusjes = array_column($oud['klusjes'] ?? [], null, 'id');
+    $klusjes = array_column(klusjes_voor($oud, $kid), null, 'id');
     $beloningen = array_column($oud['beloningen'] ?? [], null, 'id');
     $taken = array_column(taken_voor($oud, $kid), null, 'id');
     foreach ($n as $id => $t) {
@@ -388,13 +388,13 @@ function familie_fout(array $oud, array $nieuw, string $naam): ?string {
         if (($t['status'] ?? '') !== 'aangevraagd' || !in_array($n[$id]['status'] ?? '', ['goed', 'afgewezen'], true)
             || !gelijk($a, $b) || ($n[$id]['beslistDoor'] ?? '') !== $naam) return $nee;
     }
-    $klusjes = array_column($oud['klusjes'] ?? [], null, 'id');
     foreach ($n as $id => $t) {
         if (isset($o[$id])) continue;
         if (($t['bron'] ?? '') !== 'ouder' || ($t['status'] ?? '') !== 'goed' || ($t['door'] ?? '') !== $naam) return $nee;
         $bedrag = $t['amount'] ?? null;
         $ref = (string)($t['ref'] ?? '');
-        // Taken met de sterren en beloning van dit kind.
+        // Klusjes en taken met de waarden van dit kind.
+        $klusjes = array_column(klusjes_voor($oud, (string)($t['kid'] ?? '')), null, 'id');
         $taken = array_column(taken_voor($oud, (string)($t['kid'] ?? '')), null, 'id');
         if (($t['type'] ?? '') === 'klus') {
             if (!isset($klusjes[$ref]) || $bedrag !== $klusjes[$ref]['waarde']) return 'Onbekend klusje.';
@@ -421,19 +421,21 @@ function week_start(array $data): int {
     return strtotime("today -$terug days") * 1000;
 }
 
-// Taken zoals ze voor één kind gelden: uitgezette weg, eigen sterren of beloning toegepast (net als taakVoorKind in de app).
-function taken_voor(array $data, string $kid): array {
+// Taken of klusjes zoals ze voor één kind gelden: uitgezette weg, eigen sterren, beloning
+// of opbrengst toegepast (net als voorKind in de app).
+function voor_kind(array $lijst, string $kid): array {
     $uit = [];
-    foreach ($data['taken'] ?? [] as $t) {
+    foreach ($lijst as $t) {
         if (!is_array($t) || !isset($t['id'])) continue;
         $p = is_array($t['perKind'] ?? null) && is_array($t['perKind'][$kid] ?? null) ? $t['perKind'][$kid] : [];
         if (!empty($p['uit'])) continue;
-        if (!empty($p['doel'])) $t['doel'] = (int)$p['doel'];
-        if (!empty($p['beloning'])) $t['beloning'] = (int)$p['beloning'];
+        foreach (['doel', 'beloning', 'waarde'] as $v) if (!empty($p[$v])) $t[$v] = (int)$p[$v];
         $uit[] = $t;
     }
     return $uit;
 }
+function taken_voor(array $data, string $kid): array { return voor_kind($data['taken'] ?? [], $kid); }
+function klusjes_voor(array $data, string $kid): array { return voor_kind($data['klusjes'] ?? [], $kid); }
 
 // Wat de widget van één kind laat zien. Rekent hetzelfde als de app (saldo min gereserveerd).
 function samenvatting(array $data, string $kid): ?array {
