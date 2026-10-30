@@ -68,7 +68,7 @@ const SPELLEN = [['', 'Geen'], ['https://spelletjes.darkesttimes.nl/', 'Flesjes 
 const spelNaam = (url) => (SPELLEN.find(([u]) => u === url) || [url, 'Spelletje'])[1];
 
 // Getekende plaatjes voor de kind-app, per thema. Iconen zonder plaatje blijven een lijnicoon.
-const PLAATJES = { plate: 'tafel-dekken', table: 'tafel-afruimen', blocks: 'speelgoed-opruimen', mand: 'boodschappen', paw: 'huisdier-voeren', tooth: 'tanden-poetsen', tablet: 'tablet', game: 'spelletje', tv: 'tv', book: 'voorleesverhaal', moon: 'later-naar-bed', ice: 'toetje', kamer: 'kamer-opruimen' };
+const PLAATJES = { plate: 'tafel-dekken', table: 'tafel-afruimen', blocks: 'speelgoed-opruimen', mand: 'boodschappen', paw: 'huisdier-voeren', tooth: 'tanden-poetsen', tablet: 'tablet', game: 'spelletje', tv: 'tv', book: 'voorleesverhaal', moon: 'later-naar-bed', ice: 'toetje', kamer: 'kamer-opruimen', bed: 'bed-opmaken' };
 const PLAATJE_MAP = { geen: 'neutral', eenhoorn: 'unicorn', dino: 'dinosaurus' };
 const plaatje = (d, thema, size, sw) => (PLAATJES[d] ? `<img class="ill" src="img/${PLAATJE_MAP[thema] || 'neutral'}/${PLAATJES[d]}.webp" width="${size}" height="${size}" alt="">` : icon(d, size, sw));
 
