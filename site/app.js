@@ -54,6 +54,13 @@ const KLEUREN = [
   ['#B0306A', '#FAE8F0'], ['#4D7C0F', '#EEF5E4'], ['#1D2733', '#ECEFF3']
 ];
 const ICOON_KEUZE = ['plate', 'table', 'kamer', 'bed', 'tooth', 'shirt', 'blocks', 'mand', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star'];
+// Omschrijving per symbool (bij aanwijzen en onder de keuze in Beheer).
+const ICOON_NAAM = {
+  plate: 'Tafel dekken', table: 'Tafel afruimen', kamer: 'Kamer opruimen', bed: 'Bed opmaken', tooth: 'Tanden poetsen',
+  shirt: 'Aankleden', blocks: 'Speelgoed opruimen', mand: 'Boodschappen', bag: 'Schooltas', paw: 'Huisdier voeren',
+  broom: 'Vegen', trash: 'Afval weggooien', tablet: 'Tablet', tv: 'Tv kijken', game: 'Spelletje', book: 'Voorlezen',
+  moon: 'Later naar bed', ice: 'Toetje', gift: 'Cadeautje', music: 'Muziek', ball: 'Buiten spelen', star: 'Ster'
+};
 const DUREN = [0, 5, 10, 15, 20, 30, 45, 60];
 const THEMAS = [['geen', 'Standaard'], ['eenhoorn', 'Eenhoorns'], ['dino', 'Dinosaurussen']];
 // Spelletjes die een beloning direct kan openen.
@@ -1425,7 +1432,7 @@ function sheetBewerk() {
         <span class="muted">${eenheid}</span>
       </div>`;
     velden = `<div class="lbl">Plaatje</div>
-      <div class="iconen">${ICOON_KEUZE.map((k) => `<button type="button" class="ikoon${e.icon === k ? ' on' : ''}" aria-label="Plaatje ${k}" aria-pressed="${e.icon === k}" data-a="editVeld" data-x="icon" data-id="${k}">${icon(k, 24)}</button>`).join('')}</div>
+      ${iconKiezer(e)}
       ${stap('doel', 'Sterren nodig per week', e.doel === 1 ? 'ster' : 'sterren')}
       ${stap('beloning', 'Beloning bij voltooien', munt(e.beloning))}
       <p class="muted" style="margin:0">Elke keer dat het kind de taak doet, krijgt het een ster. Zijn alle sterren binnen in één week, dan krijgt het de beloning. Het kind kiest zelf welke taken het die week doet.</p>
@@ -1434,7 +1441,7 @@ function sheetBewerk() {
     const isKlus = e.soort === 'klus';
     const veld = isKlus ? 'waarde' : 'kosten';
     velden = `<div class="lbl">Plaatje</div>
-      <div class="iconen">${ICOON_KEUZE.map((k) => `<button type="button" class="ikoon${e.icon === k ? ' on' : ''}" aria-label="Plaatje ${k}" aria-pressed="${e.icon === k}" data-a="editVeld" data-x="icon" data-id="${k}">${icon(k, 24)}</button>`).join('')}</div>
+      ${iconKiezer(e)}
       <div class="stepper">
         <span class="lbl grow">${isKlus ? 'Levert op' : 'Kost'}</span>
         <button type="button" class="stepbtn" aria-label="Minder" data-a="editVeld" data-x="${veld}" data-id="-">−</button>
@@ -1592,6 +1599,14 @@ function renderWelkom() {
 }
 
 // Bewerkscherm van een taak of klusje: per kind aan/uit en eigen waarden.
+// Symbool kiezen in Beheer: naam bij aanwijzen, en onder het raster welk symbool gekozen is
+// (op een telefoon kun je niet aanwijzen). Met tekening = op de tablet een getekend plaatje.
+function iconKiezer(e) {
+  const naam = (k) => (ICOON_NAAM[k] || k) + (PLAATJES[k] ? ' (met tekening op de tablet)' : '');
+  return `<div class="iconen">${ICOON_KEUZE.map((k) => `<button type="button" class="ikoon${e.icon === k ? ' on' : ''}" title="${naam(k)}" aria-label="${naam(k)}" aria-pressed="${e.icon === k}" data-a="editVeld" data-x="icon" data-id="${k}">${icon(k, 24)}</button>`).join('')}</div>
+      <p class="muted ikoon-naam">Gekozen: <b>${naam(e.icon)}</b></p>`;
+}
+
 function perKindBlok(e) {
   if (!s.kids.length) return '';
   const isTaak = e.soort === 'taak';

@@ -177,6 +177,8 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 .kleur.on { box-shadow: 0 0 0 3px var(--ink); }
 .iconen { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .ikoon { height: 44px; border-radius: 12px; border: 2px solid var(--line); background: #fff; display: flex; align-items: center; justify-content: center; }
+.ikoon-naam { margin: -4px 0 0; font-size: 13px; }
+.ikoon-naam b { color: var(--ink); }
 .ikoon.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 
 /* Kind-app */
