@@ -281,8 +281,9 @@ body.echt .phone { background: var(--soft); }
 /* Thema's in de kind-app */
 .saldo { position: relative; overflow: hidden; }
 .saldo > :not(.saldo-deco) { position: relative; z-index: 1; }
-.saldo-deco { position: absolute; right: -8px; bottom: -14px; opacity: .95; pointer-events: none; }
+.saldo-deco { position: absolute; right: 4px; bottom: 2px; pointer-events: none; }
 .t-mascotte { display: flex; margin: -8px 0; }
+.mascotte { display: block; object-fit: contain; }
 .tablet.thema-eenhoorn {
   --t-accent: #7C3AED;
   --t-rand: #F5C2E7;

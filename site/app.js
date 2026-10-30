@@ -66,35 +66,9 @@ const PLAATJE_MAP = { geen: 'neutral', eenhoorn: 'unicorn', dino: 'dinosaurus' }
 const plaatje = (d, thema, size, sw) => (PLAATJES[d] ? `<img class="ill" src="img/${PLAATJE_MAP[thema] || 'neutral'}/${PLAATJES[d]}.webp" width="${size}" height="${size}" alt="">` : icon(d, size, sw));
 
 // Mascottes voor de kind-app, per thema.
-const MASCOTTE = {
-  eenhoorn: (size) => `<svg width="${size}" height="${size}" viewBox="0 0 120 120" aria-hidden="true">
-    <g stroke="#5B4A86" stroke-width="2.5">
-      <circle cx="60" cy="34" r="10" fill="#F9A8D4"/><circle cx="50" cy="46" r="10" fill="#C4B5FD"/>
-      <circle cx="44" cy="60" r="10" fill="#93C5FD"/><circle cx="40" cy="74" r="9" fill="#F9A8D4"/>
-      <circle cx="38" cy="88" r="9" fill="#C4B5FD"/><circle cx="38" cy="101" r="8" fill="#93C5FD"/>
-      <path d="M46 110C42 94 42 78 48 66C52 46 66 33 82 33C94 33 102 41 106 53C110 63 108 73 100 77C94 80 86 79 80 75C76 85 74 97 76 110Z" fill="#fff" stroke-linejoin="round"/>
-      <path d="M70 38L65 19L80 31Z" fill="#fff" stroke-linejoin="round"/>
-      <path d="M82 33L97 6L91 35Z" fill="#FCD34D" stroke="#B45309" stroke-linejoin="round"/>
-      <path d="M86 25L93 23M84 30L92 28M89 18L95 16" stroke="#B45309" stroke-width="2"/>
-      <path d="M83 52q5-5 10 0" fill="none" stroke-linecap="round"/>
-    </g>
-    <circle cx="94" cy="63" r="5" fill="#F9A8D4" opacity=".7"/>
-    <circle cx="103" cy="66" r="2" fill="#5B4A86"/>
-  </svg>`,
-  dino: (size) => `<svg width="${size}" height="${size}" viewBox="0 0 120 120" aria-hidden="true">
-    <g stroke="#2F5A1C" stroke-width="2.5" stroke-linejoin="round">
-      <path d="M48 58l5-11 6 10zM62 56l6-11 5 11zM76 52l7-9 3 11zM86 36l8-6 1 10z" fill="#FB923C"/>
-      <path d="M24 88C12 90 6 84 3 74C11 80 18 80 26 78Z" fill="#84CC16"/>
-      <rect x="32" y="90" width="12" height="20" rx="5" fill="#65A30D"/>
-      <rect x="64" y="90" width="12" height="20" rx="5" fill="#65A30D"/>
-      <path d="M20 90C20 70 38 58 58 58C70 58 78 62 82 52C86 40 88 26 98 22C108 18 117 26 115 36C113 44 105 46 99 46C95 56 93 70 91 80C89 92 80 100 66 100L30 100C24 100 20 97 20 90Z" fill="#84CC16"/>
-      <path d="M40 92C40 80 50 74 62 74C72 74 78 80 78 90" fill="#D9F99D" stroke-width="2"/>
-    </g>
-    <circle cx="104" cy="31" r="3" fill="#1D2733"/>
-    <path d="M100 40q6 3 11-1" fill="none" stroke="#2F5A1C" stroke-width="2.5" stroke-linecap="round"/>
-    <circle cx="52" cy="68" r="3" fill="#65A30D"/><circle cx="66" cy="66" r="2.5" fill="#65A30D"/>
-  </svg>`
-};
+const MASCOTTE_PLAATJE = { geen: 'beer', eenhoorn: 'eenhoorn', dino: 'dino' };
+const MASCOTTE = Object.fromEntries(Object.entries(MASCOTTE_PLAATJE).map(([thema, naam]) => [thema,
+  (size) => `<img class="mascotte" src="img/mascotte/${naam}.webp" width="${size}" height="${size}" alt="" aria-hidden="true">`]));
 const UUR = 3600e3;
 const DAG = 24 * UUR;
 const DAGEN = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
@@ -1868,7 +1842,7 @@ function renderKind() {
   return `
     <div class="t-head">
       ${avatar(kind, 52)}
-      ${thema !== 'geen' ? `<span class="t-mascotte">${MASCOTTE[thema](64)}</span>` : ''}
+      <span class="t-mascotte">${MASCOTTE[thema](64)}</span>
       <span class="hoi">Hoi ${kind.naam}!</span>
       ${takenVan(kind.id).length ? `<button type="button" class="taken-knop${takenScherm ? ' on' : ''}" data-a="kindScherm" data-id="${takenScherm ? 'beloningen' : 'taken'}">${takenScherm ? '← Beloningen' : ster(24) + ' Taken'}</button>` : ''}
       <span class="grow"></span>
@@ -1879,7 +1853,7 @@ function renderKind() {
     <div class="t-grid">
       <div class="t-left">
         <div class="saldo">
-          ${thema !== 'geen' ? `<span class="saldo-deco">${MASCOTTE[thema](130)}</span>` : ''}
+          <span class="saldo-deco">${MASCOTTE[thema](104)}</span>
           <span class="lbl">${v.titel}</span>
           <div class="saldo-row">${v.icoon(72)}<span class="saldo-num">${saldoTonen(kind.id, st.beschikbaar)}</span>
             ${takenVan(kind.id).length ? `<span class="sterren-tel" role="img" aria-label="${sterren} sterren deze week">${ster(44)}<b>${sterren}</b></span>` : ''}</div>
@@ -1958,7 +1932,7 @@ function volgendFeest() {
   const thema = MASCOTTE[kind.thema] ? kind.thema : 'geen';
   el.innerHTML = `<canvas class="confetti" aria-hidden="true"></canvas>
     <button type="button" class="feest-kaart" data-a="feestWeg" aria-label="Sluiten">
-      <span class="feest-beeld">${isSter ? ster(110) : thema !== 'geen' ? MASCOTTE[thema](120) : coin(110)}</span>
+      <span class="feest-beeld">${isSter ? ster(110) : MASCOTTE[thema](120)}</span>
       <span class="feest-titel" style="color:${{ eenhoorn: '#7C3AED', dino: '#3F6212' }[thema] || kind.kleur}">Hoera, ${esc(kind.naam)}!</span>
       <span class="feest-tekst">${taak ? 'Je hebt een taak voltooid!' : isSter ? 'Je hebt een ster verdiend!' : 'Je hebt een klusje geklaard!'}</span>
       <span class="feest-wat">${act ? `<span class="ricon">${plaatje(act.icon, thema, 34, 1.5)}</span>` : ''}${esc(taak ? (act ? act.naam : t.label) : t.label)}</span>
