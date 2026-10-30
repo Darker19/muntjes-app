@@ -305,7 +305,8 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
     if (isset($fn[$kid]) && !gelijk($fo[$kid] ?? null, $fn[$kid])) {
         $ids = $fn[$kid]['ids'] ?? null;
         $week = $fn[$kid]['week'] ?? null;
-        $takenIds = array_column($oud['taken'] ?? [], 'id');
+        // Alleen taken die voor dit kind aan staan.
+        $takenIds = array_column(taken_voor($oud, $kid), 'id');
         if (!is_array($ids)) return waarom('focus ids', $nee);
         // Vastgezette taken tellen mee voor het maximum; het kind kiest alleen de rest.
         $vast = [];
@@ -340,7 +341,7 @@ function kind_fout(array $oud, array $nieuw, string $kid): ?string {
 
     $klusjes = array_column($oud['klusjes'] ?? [], null, 'id');
     $beloningen = array_column($oud['beloningen'] ?? [], null, 'id');
-    $taken = array_column($oud['taken'] ?? [], null, 'id');
+    $taken = array_column(taken_voor($oud, $kid), null, 'id');
     foreach ($n as $id => $t) {
         if (isset($o[$id])) continue;
         if (!$eigenOpen($t)) return waarom('nieuwe tx niet eigen '.$id, $nee);
@@ -388,12 +389,13 @@ function familie_fout(array $oud, array $nieuw, string $naam): ?string {
             || !gelijk($a, $b) || ($n[$id]['beslistDoor'] ?? '') !== $naam) return $nee;
     }
     $klusjes = array_column($oud['klusjes'] ?? [], null, 'id');
-    $taken = array_column($oud['taken'] ?? [], null, 'id');
     foreach ($n as $id => $t) {
         if (isset($o[$id])) continue;
         if (($t['bron'] ?? '') !== 'ouder' || ($t['status'] ?? '') !== 'goed' || ($t['door'] ?? '') !== $naam) return $nee;
         $bedrag = $t['amount'] ?? null;
         $ref = (string)($t['ref'] ?? '');
+        // Taken met de sterren en beloning van dit kind.
+        $taken = array_column(taken_voor($oud, (string)($t['kid'] ?? '')), null, 'id');
         if (($t['type'] ?? '') === 'klus') {
             if (!isset($klusjes[$ref]) || $bedrag !== $klusjes[$ref]['waarde']) return 'Onbekend klusje.';
         } elseif (($t['type'] ?? '') === 'ster') {
@@ -417,6 +419,20 @@ function week_start(array $data): int {
     $begin = is_int($data['weekBegin'] ?? null) && $data['weekBegin'] >= 0 && $data['weekBegin'] <= 6 ? $data['weekBegin'] : 1;
     $terug = ((int)date('w') - $begin + 7) % 7;
     return strtotime("today -$terug days") * 1000;
+}
+
+// Taken zoals ze voor één kind gelden: uitgezette weg, eigen sterren of beloning toegepast (net als taakVoorKind in de app).
+function taken_voor(array $data, string $kid): array {
+    $uit = [];
+    foreach ($data['taken'] ?? [] as $t) {
+        if (!is_array($t) || !isset($t['id'])) continue;
+        $p = is_array($t['perKind'] ?? null) && is_array($t['perKind'][$kid] ?? null) ? $t['perKind'][$kid] : [];
+        if (!empty($p['uit'])) continue;
+        if (!empty($p['doel'])) $t['doel'] = (int)$p['doel'];
+        if (!empty($p['beloning'])) $t['beloning'] = (int)$p['beloning'];
+        $uit[] = $t;
+    }
+    return $uit;
 }
 
 // Wat de widget van één kind laat zien. Rekent hetzelfde als de app (saldo min gereserveerd).
@@ -449,7 +465,7 @@ function samenvatting(array $data, string $kid): ?array {
         }
     }
     // Taken waar het kind deze week op focust, met hoeveel sterren al binnen zijn.
-    $taken = array_column($data['taken'] ?? [], null, 'id');
+    $taken = array_column(taken_voor($data, $kid), null, 'id');
     $f = $data['focus'][$kid] ?? null;
     $focus = is_array($f) && (int)($f['week'] ?? 0) === $weekStart && is_array($f['ids'] ?? null) ? $f['ids'] : [];
     $focus = array_values(array_unique(array_merge(is_array($kind['vast'] ?? null) ? $kind['vast'] : [], $focus)));

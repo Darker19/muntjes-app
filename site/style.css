@@ -81,6 +81,11 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 .kname { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .avatar { border-radius: 50%; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
 .kbal { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.pkind { flex-shrink: 0; border-bottom: 1px solid var(--line2); padding-bottom: 8px; }
+.pkind.uit .col span { color: var(--muted); }
+.pkind-rij { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 0 0 4px 38px; }
+.pkind-stap { display: inline-flex; align-items: center; gap: 6px; }
+.pkind-terug { border: 0; background: none; color: var(--accent); font: inherit; font-size: 13px; font-weight: 800; padding: 6px 0; }
 .kster { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; }
 .kster b { font-family: Fredoka, sans-serif; font-size: 22px; font-weight: 600; color: #B45309; }
 .kbal .num { font-family: Fredoka, sans-serif; font-size: 30px; font-weight: 600; color: var(--ink); }

@@ -189,10 +189,10 @@ function beginState() {
     ],
     // Taken: elke keer een ster; alle sterren binnen een week = taak voltooid = beloning.
     taken: [
-      { id: 't1', naam: 'Zelf aankleden', icon: 'shirt', doel: 5, beloning: 1 },
+      { id: 't1', naam: 'Zelf aankleden', icon: 'shirt', doel: 5, beloning: 1, perKind: { daan: { doel: 3, beloning: 2 } } },
       { id: 't2', naam: 'Zelf tanden poetsen', icon: 'tooth', doel: 7, beloning: 1 },
       { id: 't3', naam: 'Bed opmaken', icon: 'bed', doel: 5, beloning: 1 },
-      { id: 't4', naam: 'Schooltas inpakken', icon: 'bag', doel: 5, beloning: 1 },
+      { id: 't4', naam: 'Schooltas inpakken', icon: 'bag', doel: 5, beloning: 1, perKind: { daan: { uit: true } } },
       { id: 't5', naam: 'Op tijd naar bed', icon: 'moon', doel: 5, beloning: 1 }
     ],
     focus: { noor: { week: weekStart(), ids: ['t1', 't3'] } },
@@ -260,7 +260,7 @@ function metHoeVaak(st) {
 // Begin van de echte app: standaardklusjes en -beloningen, nog geen kinderen.
 function startData() {
   const b = beginState();
-  return { kids: [], klusjes: b.klusjes, beloningen: b.beloningen, taken: b.taken, focus: {}, maxFocus: 3, tx: [], timers: [], kindMelden: {}, maxWeek: 7, weekBegin: 1, nextId: 1 };
+  return { kids: [], klusjes: b.klusjes, beloningen: b.beloningen, taken: b.taken.map(({ perKind, ...t }) => t), focus: {}, maxFocus: 3, tx: [], timers: [], kindMelden: {}, maxWeek: 7, weekBegin: 1, nextId: 1 };
 }
 const dataVan = (st) => Object.fromEntries(DATA_KEYS.map((k) => [k, st[k]]));
 
@@ -507,14 +507,32 @@ function spelTimer(kid, b) {
 }
 
 // ---------- taken ----------
-const taakVan = (id) => (s.taken || []).find((t) => t.id === id);
+// Per kind kan een taak uit staan, of andere sterren of een andere beloning hebben (taak.perKind).
+function taakVoorKind(t, kid) {
+  const p = t && (t.perKind || {})[kid];
+  if (!t || !p) return t || null;
+  if (p.uit) return null;
+  return { ...t, doel: p.doel || t.doel, beloning: p.beloning || t.beloning };
+}
+// Met kid: de taak zoals die voor dat kind geldt (null als hij voor dat kind uit staat).
+const taakVan = (id, kid) => {
+  const t = (s.taken || []).find((x) => x.id === id);
+  return kid ? taakVoorKind(t, kid) : t;
+};
+const takenVan = (kid) => (s.taken || []).map((t) => taakVoorKind(t, kid)).filter(Boolean);
+// Voor het bewerkscherm: per kind aan/uit en eventuele eigen sterren en beloning.
+const editPerKind = (t) => Object.fromEntries(s.kids.map((k) => {
+  const p = (t.perKind || {})[k.id] || {};
+  return [k.id, { aan: !p.uit, doel: p.doel || null, beloning: p.beloning || null }];
+}));
+const heeftPerKind = (t) => Object.values(t.perKind || {}).some((p) => p.uit || p.doel || p.beloning);
 // Taken die papa of mama voor dit kind heeft vastgezet: die staan elke week klaar.
-const vastVan = (kid) => ((kidVan(kid) || {}).vast || []).filter((id) => taakVan(id));
+const vastVan = (kid) => ((kidVan(kid) || {}).vast || []).filter((id) => taakVan(id, kid));
 // Taken die het kind deze week zelf koos (een nieuwe week begint leeg).
 function gekozenVan(kid) {
   const f = (s.focus || {})[kid];
   const vast = vastVan(kid);
-  return f && f.week === weekStart() ? f.ids.filter((id) => taakVan(id) && !vast.includes(id)) : [];
+  return f && f.week === weekStart() ? f.ids.filter((id) => taakVan(id, kid) && !vast.includes(id)) : [];
 }
 // Alle taken van het kind deze week: eerst de vaste, dan de zelf gekozen.
 const focusVan = (kid) => [...vastVan(kid), ...gekozenVan(kid)];
@@ -524,7 +542,7 @@ const sterrenDezeWeek = (kid) => s.tx.filter((t) => t.type === 'ster' && t.kid =
 
 // Alle sterren binnen? Dan de taak voltooien: de beloning gaat erbij (eenmalig per week).
 function voltooi(st, kid, taakId) {
-  const taak = (st.taken || []).find((t) => t.id === taakId);
+  const taak = taakVoorKind((st.taken || []).find((t) => t.id === taakId), kid);
   if (!taak) return {};
   const van = weekStart();
   const n = st.tx.filter((t) => t.type === 'ster' && t.kid === kid && t.ref === taakId && t.status === 'goed' && t.ts >= van).length;
@@ -643,8 +661,8 @@ const acties = {
     zet({ sheet: { type: 'taak', id: d.id }, bericht: '' });
   },
   taakKies(d) {
-    const taak = s.sheet && taakVan(s.sheet.id);
     const kid = kidVan(d.id);
+    const taak = s.sheet && kid && taakVan(s.sheet.id, kid.id);
     if (!taak || !kid || taakKlaar(kid.id, taak.id) || sterTx(kid.id, taak.id, 'goed').length >= taak.doel) return;
     voegToe({ kid: kid.id, type: 'ster', ref: taak.id, label: taak.naam, amount: 0, status: 'goed', bron: 'ouder', door: mijnNaam(), msg: s.bericht.trim() });
     zet((st) => voltooi(st, kid.id, taak.id));
@@ -684,7 +702,7 @@ const acties = {
       return;
     }
     if (t.type === 'ster') {
-      const taak = taakVan(t.ref);
+      const taak = taakVan(t.ref, t.kid);
       if (ok && taak && (taakKlaar(t.kid, t.ref) || sterTx(t.kid, t.ref, 'goed').length >= taak.doel)) { melding(t.label + ' is al voltooid deze week'); return; }
       zet((st) => ({ tx: st.tx.map((x) => (x.id === t.id ? { ...x, status: ok ? 'goed' : 'afgewezen', beslistDoor: mijnNaam() } : x)) }));
       if (ok) zet((st) => voltooi(st, t.kid, t.ref));
@@ -737,12 +755,12 @@ const acties = {
   bewerk(d) {
     if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', groot: !!k.groot, stil: !!k.stil, vast: vastVan(k.id), zeker: false } }); }
     else if (d.x === 'klus') { const k = klusVan(d.id); zet({ edit: { soort: 'klus', id: k.id, naam: k.naam, icon: k.icon, waarde: k.waarde, keer: k.keer, per: k.per, zeker: false } }); }
-    else if (d.x === 'taak') { const t = taakVan(d.id); zet({ edit: { soort: 'taak', id: t.id, naam: t.naam, icon: t.icon, doel: t.doel, beloning: t.beloning, zeker: false } }); }
+    else if (d.x === 'taak') { const t = taakVan(d.id); zet({ edit: { soort: 'taak', id: t.id, naam: t.naam, icon: t.icon, doel: t.doel, beloning: t.beloning, perKind: editPerKind(t), zeker: false } }); }
     else { const b = belVan(d.id); zet({ edit: { soort: 'bel', id: b.id, naam: b.naam, icon: b.icon, kosten: b.kosten, duur: b.duur || 0, keer: b.keer, per: b.per, spel: b.spel || '', zeker: false } }); }
   },
   nieuw(d) {
     const vrij = KLEUREN.find(([c]) => !s.kids.some((k) => k.kleur === c)) || KLEUREN[0];
-    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false, stil: false, vast: [] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag' } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1 } : { naam: '', icon: 'gift', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
+    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false, stil: false, vast: [] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag' } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1, perKind: editPerKind({}) } : { naam: '', icon: 'gift', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
     zet({ edit: { soort: d.x, id: null, ...basis, zeker: false } });
   },
   editVeld(d) {
@@ -756,6 +774,20 @@ const acties = {
     if (d.x === 'stil') v = !e.stil;
     if (d.x === 'vast') v = e.vast.includes(d.id) ? e.vast.filter((x) => x !== d.id) : [...e.vast, d.id];
     zet({ edit: { ...e, [d.x]: v, zeker: false } });
+  },
+  // Taak per kind: aan/uit, eigen sterren of beloning, of terug naar de standaard.
+  editKind(d) {
+    const e = s.edit;
+    if (!e || e.soort !== 'taak') return;
+    const p = { aan: true, ...e.perKind[d.id] };
+    const [veld, richting] = d.x.split(':');
+    if (veld === 'aan') p.aan = !p.aan;
+    else if (veld === 'standaard') { p.doel = null; p.beloning = null; }
+    else {
+      const max = veld === 'doel' ? 14 : 10;
+      p[veld] = Math.min(max, Math.max(1, (p[veld] || e[veld]) + (richting === '+' ? 1 : -1)));
+    }
+    zet({ edit: { ...e, perKind: { ...e.perKind, [d.id]: p }, zeker: false } });
   },
   editSluit() { zet({ edit: null }); },
   editOpslaan() {
@@ -775,7 +807,19 @@ const acties = {
       if (e.id) zet((st) => ({ klusjes: st.klusjes.map((k) => (k.id === e.id ? { ...k, ...item } : k)), edit: null }));
       else zet((st) => ({ klusjes: [...st.klusjes, { id: nieuwId('k'), ...item }], edit: null }));
     } else if (e.soort === 'taak') {
-      const item = { naam, icon: e.icon, doel: e.doel, beloning: e.beloning };
+      const perKind = {};
+      for (const k of s.kids) {
+        const p = e.perKind[k.id];
+        if (!p) continue;
+        if (!p.aan) perKind[k.id] = { uit: true };
+        else {
+          const x = {};
+          if (p.doel && p.doel !== e.doel) x.doel = p.doel;
+          if (p.beloning && p.beloning !== e.beloning) x.beloning = p.beloning;
+          if (Object.keys(x).length) perKind[k.id] = x;
+        }
+      }
+      const item = { naam, icon: e.icon, doel: e.doel, beloning: e.beloning, perKind };
       if (e.id) zet((st) => ({ taken: st.taken.map((t) => (t.id === e.id ? { ...t, ...item } : t)), edit: null }));
       else zet((st) => ({ taken: [...st.taken, { id: nieuwId('t'), ...item }], edit: null }));
     } else {
@@ -983,7 +1027,7 @@ const acties = {
   focusKies(d) {
     const kid = s.tabletKid;
     const vast = vastVan(kid);
-    if (vast.includes(d.id)) return;
+    if (vast.includes(d.id) || !taakVan(d.id, kid)) return;
     const ids = gekozenVan(kid);
     if (ids.includes(d.id)) {
       if (sterTx(kid, d.id).length) return;
@@ -995,7 +1039,7 @@ const acties = {
   // Kind meldt dat het een taak gedaan heeft; papa of mama geeft de ster.
   taakMeld(d) {
     const kid = s.tabletKid;
-    const taak = taakVan(d.id);
+    const taak = taakVan(d.id, kid);
     if (!taak || !s.kindMelden[kid] || !focusVan(kid).includes(taak.id)) return;
     const open = sterTx(kid, taak.id, 'aangevraagd')[0];
     if (open) { zet((st) => ({ tx: st.tx.filter((x) => x.id !== open.id) })); return; }
@@ -1115,7 +1159,7 @@ function schermMelden() {
     return `<div class="kcard">
       <div class="kname">${avatar(k)}<b>${k.naam}</b></div>
       <div class="kbal">${valuta(k).icoon(22)}<span class="num">${st.beschikbaar}</span><span>${valuta(k).woord(st.beschikbaar)}</span>
-        ${(s.taken || []).length ? `<span class="kster" role="img" aria-label="${sterrenDezeWeek(k.id)} ${sterrenDezeWeek(k.id) === 1 ? 'ster' : 'sterren'} deze week">${ster(20)}<b>${sterrenDezeWeek(k.id)}</b></span>` : ''}</div>
+        ${takenVan(k.id).length ? `<span class="kster" role="img" aria-label="${sterrenDezeWeek(k.id)} ${sterrenDezeWeek(k.id) === 1 ? 'ster' : 'sterren'} deze week">${ster(20)}<b>${sterrenDezeWeek(k.id)}</b></span>` : ''}</div>
       <div class="muted">Deze week ${st.week}/${s.maxWeek} verdiend</div>
     </div>`;
   }).join('');
@@ -1144,6 +1188,7 @@ function schermMelden() {
         <span class="icobox geel">${icon(t.icon, 26)}</span>
         <span class="kl-naam">${t.naam}</span>
         <span class="plus">${t.doel} ⭐ = +${t.beloning}</span>
+        ${heeftPerKind(t) ? '<span class="muted">Anders per kind</span>' : ''}
       </button>`).join('')}</div>` : ''}`;
 }
 
@@ -1258,7 +1303,7 @@ function schermBeheer() {
     </div>
     <h2 class="sec">Taken</h2>
     <div class="lijst">
-      ${(s.taken || []).map((t) => rij('taak', t.id, icon(t.icon, 22), t.naam, t.doel + ' ⭐ → +' + t.beloning)).join('')}
+      ${(s.taken || []).map((t) => rij('taak', t.id, icon(t.icon, 22), t.naam, t.doel + ' ⭐ → +' + t.beloning + (heeftPerKind(t) ? ' · per kind' : ''))).join('')}
       ${toevoegen('taak', 'Taak toevoegen')}
     </div>
     <h2 class="sec">Beloningen</h2>
@@ -1344,7 +1389,7 @@ function sheetBewerk() {
       </button>
       ${(s.taken || []).length ? `<div class="lbl">Vaste taken</div>
       <p class="info" style="margin:-4px 0 8px">Staan elke week klaar en tellen mee voor het maximum (${s.maxFocus || 3} per week). De rest kiest ${esc(e.naam) || 'het kind'} zelf.</p>
-      ${s.taken.map((t) => `<button type="button" class="lrij" data-a="editVeld" data-x="vast" data-id="${t.id}" aria-pressed="${e.vast.includes(t.id)}">
+      ${(e.id ? takenVan(e.id) : s.taken).map((t) => `<button type="button" class="lrij" data-a="editVeld" data-x="vast" data-id="${t.id}" aria-pressed="${e.vast.includes(t.id)}">
         ${icon(t.icon, 22)}<span class="grow">${t.naam}</span>
         <span class="switch${e.vast.includes(t.id) ? ' on' : ''}"><span></span></span>
       </button>`).join('')}` : ''}`;
@@ -1360,7 +1405,26 @@ function sheetBewerk() {
       <div class="iconen">${ICOON_KEUZE.map((k) => `<button type="button" class="ikoon${e.icon === k ? ' on' : ''}" aria-label="Plaatje ${k}" aria-pressed="${e.icon === k}" data-a="editVeld" data-x="icon" data-id="${k}">${icon(k, 24)}</button>`).join('')}</div>
       ${stap('doel', 'Sterren nodig per week', e.doel === 1 ? 'ster' : 'sterren')}
       ${stap('beloning', 'Beloning bij voltooien', munt(e.beloning))}
-      <p class="muted" style="margin:0">Elke keer dat het kind de taak doet, krijgt het een ster. Zijn alle sterren binnen in één week, dan krijgt het de beloning. Het kind kiest zelf welke taken het die week doet.</p>`;
+      <p class="muted" style="margin:0">Elke keer dat het kind de taak doet, krijgt het een ster. Zijn alle sterren binnen in één week, dan krijgt het de beloning. Het kind kiest zelf welke taken het die week doet.</p>
+      ${s.kids.length ? `<div class="lbl">Per kind</div>
+      <p class="info" style="margin:-4px 0 8px">Zet de taak uit voor een kind, of geef een kind andere sterren of een andere beloning. Anders geldt wat hierboven staat.</p>
+      ${s.kids.map((k) => {
+        const p = e.perKind[k.id] || { aan: true };
+        const eigen = p.doel || p.beloning;
+        const mini = (veld, eenheid) => `<span class="pkind-stap">
+          <button type="button" class="stepbtn sm" aria-label="Minder" data-a="editKind" data-id="${k.id}" data-x="${veld}:-">−</button>
+          <span class="stepnum sm" aria-live="polite">${p[veld] || e[veld]}</span>
+          <button type="button" class="stepbtn sm" aria-label="Meer" data-a="editKind" data-id="${k.id}" data-x="${veld}:+">+</button>
+          <span class="muted">${eenheid}</span></span>`;
+        return `<div class="pkind${p.aan ? '' : ' uit'}">
+          <button type="button" class="lrij" data-a="editKind" data-id="${k.id}" data-x="aan" aria-pressed="${!!p.aan}">
+            ${avatar(k)}<span class="col"><span>${esc(k.naam)}</span><small>${!p.aan ? 'Deze taak staat uit' : eigen ? 'Eigen instelling' : 'Zoals hierboven'}</small></span>
+            <span class="switch${p.aan ? ' on' : ''}"><span></span></span>
+          </button>
+          ${p.aan ? `<div class="pkind-rij">${mini('doel', '⭐')}${mini('beloning', valuta(k).woord(p.beloning || e.beloning))}
+            ${eigen ? `<button type="button" class="pkind-terug" data-a="editKind" data-id="${k.id}" data-x="standaard">Zoals hierboven</button>` : ''}</div>` : ''}
+        </div>`;
+      }).join('')}` : ''}`;
   } else {
     const isKlus = e.soort === 'klus';
     const veld = isKlus ? 'waarde' : 'kosten';
@@ -1556,11 +1620,12 @@ function sheetTaak() {
   if (!s.sheet || s.sheet.type !== 'taak') return '';
   const taak = taakVan(s.sheet.id);
   if (!taak) return '';
-  const kids = s.kids.map((kid) => {
+  const kids = s.kids.filter((kid) => taakVan(taak.id, kid.id)).map((kid) => {
+    const voor = taakVan(taak.id, kid.id);
     const n = sterTx(kid.id, taak.id, 'goed').length;
-    const klaar = taakKlaar(kid.id, taak.id) || n >= taak.doel;
+    const klaar = taakKlaar(kid.id, taak.id) || n >= voor.doel;
     const gekozen = focusVan(kid.id).includes(taak.id);
-    const sub = klaar ? 'Voltooid deze week' : n + ' van ' + taak.doel + ' sterren' + (gekozen ? '' : ' · niet gekozen');
+    const sub = klaar ? 'Voltooid deze week' : n + ' van ' + voor.doel + ' sterren' + (gekozen ? '' : ' · niet gekozen') + (heeftPerKind(taak) ? ' · +' + voor.beloning : '');
     return `<button type="button" class="kidpick" style="border-color:${klaar ? 'var(--line)' : kid.kleur};background:${klaar ? 'var(--soft)' : kid.zacht}" data-a="taakKies" data-id="${kid.id}" ${klaar ? 'disabled' : ''}>
       ${avatar(kid, 36)}
       <span class="col"><b>${kid.naam}</b><small>${sub}</small></span>
@@ -1571,10 +1636,10 @@ function sheetTaak() {
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-taak" data-scroll="sh-taak">
       <div class="sh-head">
         <span class="icobox geel" style="width:48px;height:48px;border-radius:14px">${icon(taak.icon, 28)}</span>
-        <div><div class="sh-title" id="sh-taak">${taak.naam}</div><div class="plus" style="font-size:13px">${taak.doel} sterren = +${taak.beloning}</div></div>
+        <div><div class="sh-title" id="sh-taak">${taak.naam}</div><div class="plus" style="font-size:13px">${heeftPerKind(taak) ? 'Sterren en beloning per kind' : taak.doel + ' sterren = +' + taak.beloning}</div></div>
       </div>
       <div class="lbl">Wie krijgt een ster?</div>
-      <div class="grid2">${kids}</div>
+      ${kids ? `<div class="grid2">${kids}</div>` : '<p class="muted">Deze taak staat voor geen enkel kind aan.</p>'}
       <label class="lbl" for="bericht">Berichtje (optioneel)</label>
       <input class="inp" id="bericht" data-input="bericht" value="${esc(s.bericht)}" placeholder="Goed bezig!" autocomplete="off">
       <button type="button" class="btn btn-soft" data-a="sluit">Annuleren</button>
@@ -1710,7 +1775,7 @@ function renderKind() {
   if (takenScherm) {
     const maxF = s.maxFocus || 3;
     const mijn = focus.map((id) => {
-      const taak = taakVan(id);
+      const taak = taakVan(id, kind.id);
       const n = sterTx(kind.id, id, 'goed').length;
       const open = sterTx(kind.id, id, 'aangevraagd').length;
       const klaar = taakKlaar(kind.id, id) || n >= taak.doel;
@@ -1727,7 +1792,7 @@ function renderKind() {
     }).join('');
     const vasteTaken = vastVan(kind.id);
     const zelf = Math.max(0, maxF - vasteTaken.length);
-    const kiezen = (s.taken || []).map((taak) => {
+    const kiezen = takenVan(kind.id).map((taak) => {
       const gekozen = focus.includes(taak.id);
       const vastgezet = vasteTaken.includes(taak.id);
       const bezig = gekozen && sterTx(kind.id, taak.id).length > 0;
@@ -1779,7 +1844,7 @@ function renderKind() {
       ${avatar(kind, 52)}
       ${thema !== 'geen' ? `<span class="t-mascotte">${MASCOTTE[thema](64)}</span>` : ''}
       <span class="hoi">Hoi ${kind.naam}!</span>
-      ${(s.taken || []).length ? `<button type="button" class="taken-knop${takenScherm ? ' on' : ''}" data-a="kindScherm" data-id="${takenScherm ? 'beloningen' : 'taken'}">${takenScherm ? '← Beloningen' : ster(24) + ' Taken'}</button>` : ''}
+      ${takenVan(kind.id).length ? `<button type="button" class="taken-knop${takenScherm ? ' on' : ''}" data-a="kindScherm" data-id="${takenScherm ? 'beloningen' : 'taken'}">${takenScherm ? '← Beloningen' : ster(24) + ' Taken'}</button>` : ''}
       <span class="grow"></span>
       <span class="wk-lbl">Deze week verdiend</span>
       <span class="wk" role="img" aria-label="${st.week} van ${s.maxWeek}">${vakjes}</span>
@@ -1791,7 +1856,7 @@ function renderKind() {
           ${thema !== 'geen' ? `<span class="saldo-deco">${MASCOTTE[thema](130)}</span>` : ''}
           <span class="lbl">${v.titel}</span>
           <div class="saldo-row">${v.icoon(72)}<span class="saldo-num">${saldoTonen(kind.id, st.beschikbaar)}</span>
-            ${(s.taken || []).length ? `<span class="sterren-tel" role="img" aria-label="${sterren} sterren deze week">${ster(44)}<b>${sterren}</b></span>` : ''}</div>
+            ${takenVan(kind.id).length ? `<span class="sterren-tel" role="img" aria-label="${sterren} sterren deze week">${ster(44)}<b>${sterren}</b></span>` : ''}</div>
           ${st.gereserveerd > 0
             ? `<span class="res">${st.saldo} ${v.woord(st.saldo)}, waarvan ${st.gereserveerd} gereserveerd</span>`
             : '<span class="vrij">Allemaal vrij te besteden</span>'}
@@ -1859,7 +1924,7 @@ function volgendFeest() {
   const v = valuta(kind);
   const taak = t.type === 'taakklaar';
   const isSter = t.type === 'ster';
-  const act = taak || isSter ? taakVan(t.ref) : klusVan(t.ref);
+  const act = taak || isSter ? taakVan(t.ref, kind.id) || taakVan(t.ref) : klusVan(t.ref);
   const n = isSter && act ? Math.min(act.doel, sterTx(kind.id, act.id, 'goed').length) : 0;
   const beloond = isSter && act
     ? `<span class="sterrij">${Array.from({ length: act.doel }, (_, i) => ster(40, i < n)).join('')}</span><b class="feest-ster">${n}/${act.doel}</b>`
