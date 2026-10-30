@@ -788,6 +788,11 @@ const acties = {
     const timers = s.timers.map((t) => (t.status === 'loopt' ? { ...t, eind: nu + (timerRest(t) * 1000) / nieuw } : t));
     zet({ demoSnel: !s.demoSnel, timers });
   },
+  ouderThema(d) {
+    ouderThema = ['geen', 'eenhoorn', 'dino'].includes(d.id) ? d.id : '';
+    try { localStorage.setItem(OUDER_THEMA, ouderThema); } catch (e) { /* negeren */ }
+    zet({});
+  },
   maxFocus(d) { zet({ maxFocus: Math.min(5, Math.max(1, (s.maxFocus || 3) + (d.x === '+' ? 1 : -1))) }); },
   meldToggle(d) { zet((st) => ({ kindMelden: { ...st.kindMelden, [d.id]: !st.kindMelden[d.id] } })); },
   maxWeek(d) { zet({ maxWeek: Math.min(30, Math.max(1, s.maxWeek + (d.x === '+' ? 1 : -1))) }); },
@@ -1122,6 +1127,24 @@ function overigInfo() {
 }
 
 // Regel in Beheer/Account: meldingen aan of uit op deze telefoon.
+// Plaatjes in de ouder-app: lijntjes (standaard) of de tekeningen van een thema.
+// Per telefoon onthouden; het thema van de kinderen verandert er niet door.
+const OUDER_THEMA = 'muntjes-ouder-thema';
+let ouderThema = '';
+try { ouderThema = localStorage.getItem(OUDER_THEMA) || ''; } catch (e) { /* negeren */ }
+if (!['', 'geen', 'eenhoorn', 'dino'].includes(ouderThema)) ouderThema = '';
+const oIcon = (k, size) => (ouderThema && PLAATJES[k] ? plaatje(k, ouderThema, size + 6) : icon(k, size));
+function weergaveBlok() {
+  const keuzes = [['', 'Lijntjes'], ['geen', 'Teddybeer'], ['eenhoorn', 'Eenhoorn'], ['dino', 'Dino']];
+  return `<h2 class="sec">Weergave</h2>
+    <div class="lijst">
+      <div class="lrij" style="flex-wrap:wrap;padding:10px 0">
+        <span class="col" style="flex-basis:100%"><span>Plaatjes in deze app</span><small>Alleen op deze telefoon. Symbolen zonder tekening blijven lijntjes.</small></span>
+        <div class="seg4">${keuzes.map(([id, label]) => `<button type="button" class="seg${ouderThema === id ? ' on' : ''}" aria-pressed="${ouderThema === id}" data-a="ouderThema" data-id="${id}">${id && MASCOTTE[id] ? MASCOTTE[id](22) : ''}${label}</button>`).join('')}</div>
+      </div>
+    </div>`;
+}
+
 function pushBlok() {
   if (DEMO) {
     return `<h2 class="sec">Meldingen</h2>
@@ -1195,7 +1218,7 @@ function schermMelden() {
   }).join('');
   const klusjes = s.klusjes.map((k) => `
     <button type="button" class="klus" data-a="klusOpen" data-id="${k.id}">
-      <span class="icobox">${icon(k.icon, 26)}</span>
+      <span class="icobox">${oIcon(k.icon, 26)}</span>
       <span class="kl-naam">${k.naam}</span>
       <span class="plus">+${k.waarde}</span>
       <span class="muted">${perTekst(k)}${heeftPerKind(k) ? ' · anders per kind' : ''}</span>
@@ -1215,7 +1238,7 @@ function schermMelden() {
     <h2 class="sec sp">Ster geven voor een taak</h2>
     <div class="grid2">${s.taken.map((t) => `
       <button type="button" class="klus" data-a="taakOpen" data-id="${t.id}">
-        <span class="icobox geel">${icon(t.icon, 26)}</span>
+        <span class="icobox geel">${oIcon(t.icon, 26)}</span>
         <span class="kl-naam">${t.naam}</span>
         <span class="plus">${t.doel} ⭐ = +${t.beloning}</span>
         ${heeftPerKind(t) ? '<span class="muted">Anders per kind</span>' : ''}
@@ -1233,7 +1256,7 @@ function schermAanvragen() {
     const sub = kid.naam + (isKlus ? ' meldt een klusje' : isSter ? ' meldt een taak' : ' vraagt een beloning') + ' · ' + tijdLabel(t.ts) + (!isKlus && !isSter && act && act.duur ? ' · timer ' + act.duur + ' min' : '');
     return `<div class="req">
       <div class="req-top">
-        <span class="icobox wit">${icon(act ? act.icon : IC.star, 26)}</span>
+        <span class="icobox wit">${act ? oIcon(act.icon, 26) : icon(IC.star, 26)}</span>
         <div class="grow"><b>${esc(t.label)}</b><div class="muted">${esc(sub)}</div></div>
         <span class="req-amt ${isKlus || isSter ? 'pos' : 'wachtc'}">${isSter ? '+1 ⭐' : (isKlus ? '+' : '−') + n + ' ' + valuta(kid).woord(n)}</span>
       </div>
@@ -1298,6 +1321,7 @@ function schermAccount() {
     <div class="lijst">
       <button type="button" class="lrij" data-a="pinOpen"><span class="grow">Mijn pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>
     </div>
+    ${weergaveBlok()}
     ${pushBlok()}
     <button type="button" class="btn btn-ink vol" data-a="vergrendel">${icon(IC.slot, 18, 2)} Uitloggen</button>`;
 }
@@ -1328,17 +1352,17 @@ function schermBeheer() {
     </div>
     <h2 class="sec">Klusjes</h2>
     <div class="lijst">
-      ${s.klusjes.map((k) => rij('klus', k.id, icon(k.icon, 22), k.naam, '+' + k.waarde + ' · ' + k.keer + '×/' + k.per + (heeftPerKind(k) ? ' · per kind' : ''))).join('')}
+      ${s.klusjes.map((k) => rij('klus', k.id, oIcon(k.icon, 22), k.naam, '+' + k.waarde + ' · ' + k.keer + '×/' + k.per + (heeftPerKind(k) ? ' · per kind' : ''))).join('')}
       ${toevoegen('klus', 'Klusje toevoegen')}
     </div>
     <h2 class="sec">Taken</h2>
     <div class="lijst">
-      ${(s.taken || []).map((t) => rij('taak', t.id, icon(t.icon, 22), t.naam, t.doel + ' ⭐ → +' + t.beloning + (heeftPerKind(t) ? ' · per kind' : ''))).join('')}
+      ${(s.taken || []).map((t) => rij('taak', t.id, oIcon(t.icon, 22), t.naam, t.doel + ' ⭐ → +' + t.beloning + (heeftPerKind(t) ? ' · per kind' : ''))).join('')}
       ${toevoegen('taak', 'Taak toevoegen')}
     </div>
     <h2 class="sec">Beloningen</h2>
     <div class="lijst">
-      ${s.beloningen.map((b) => rij('bel', b.id, icon(b.icon, 22), b.naam, b.kosten + ' ' + munt(b.kosten) + (b.duur ? ' · ' + b.duur + ' min' : '') + (b.spel ? ' · spel' : '') + ' · ' + b.keer + '×/' + b.per)).join('')}
+      ${s.beloningen.map((b) => rij('bel', b.id, oIcon(b.icon, 22), b.naam, b.kosten + ' ' + munt(b.kosten) + (b.duur ? ' · ' + b.duur + ' min' : '') + (b.spel ? ' · spel' : '') + ' · ' + b.keer + '×/' + b.per)).join('')}
       ${toevoegen('bel', 'Beloning toevoegen')}
     </div>
     <h2 class="sec">Instellingen</h2>
@@ -1364,6 +1388,7 @@ function schermBeheer() {
         ? '<div class="lrij"><span class="grow">Pincode</span><span class="r">Alleen in de echte app</span></div>'
         : `<button type="button" class="lrij" data-a="pinOpen"><span class="grow">Mijn pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>`}
     </div>
+    ${weergaveBlok()}
     ${pushBlok()}
     <h2 class="sec">Gegevens</h2>
     <div class="lijst">
@@ -1420,7 +1445,7 @@ function sheetBewerk() {
       ${(s.taken || []).length ? `<div class="lbl">Vaste taken</div>
       <p class="info" style="margin:-4px 0 8px">Staan elke week klaar en tellen mee voor het maximum (${s.maxFocus || 3} per week). De rest kiest ${esc(e.naam) || 'het kind'} zelf.</p>
       ${(e.id ? takenVan(e.id) : s.taken).map((t) => `<button type="button" class="lrij" data-a="editVeld" data-x="vast" data-id="${t.id}" aria-pressed="${e.vast.includes(t.id)}">
-        ${icon(t.icon, 22)}<span class="grow">${t.naam}</span>
+        ${oIcon(t.icon, 22)}<span class="grow">${t.naam}</span>
         <span class="switch${e.vast.includes(t.id) ? ' on' : ''}"><span></span></span>
       </button>`).join('')}` : ''}`;
   } else if (e.soort === 'taak') {
@@ -1603,7 +1628,7 @@ function renderWelkom() {
 // (op een telefoon kun je niet aanwijzen). Met tekening = op de tablet een getekend plaatje.
 function iconKiezer(e) {
   const naam = (k) => (ICOON_NAAM[k] || k) + (PLAATJES[k] ? ' (met tekening op de tablet)' : '');
-  return `<div class="iconen">${ICOON_KEUZE.map((k) => `<button type="button" class="ikoon${e.icon === k ? ' on' : ''}" title="${naam(k)}" aria-label="${naam(k)}" aria-pressed="${e.icon === k}" data-a="editVeld" data-x="icon" data-id="${k}">${icon(k, 24)}</button>`).join('')}</div>
+  return `<div class="iconen">${ICOON_KEUZE.map((k) => `<button type="button" class="ikoon${e.icon === k ? ' on' : ''}" title="${naam(k)}" aria-label="${naam(k)}" aria-pressed="${e.icon === k}" data-a="editVeld" data-x="icon" data-id="${k}">${oIcon(k, 24)}</button>`).join('')}</div>
       <p class="muted ikoon-naam">Gekozen: <b>${naam(e.icon)}</b></p>`;
 }
 
@@ -1656,7 +1681,7 @@ function sheetKlus() {
     <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-klus" data-scroll="sh-klus">
       <div class="sh-head">
-        <span class="icobox" style="width:48px;height:48px;border-radius:14px">${icon(k.icon, 28)}</span>
+        <span class="icobox" style="width:48px;height:48px;border-radius:14px">${oIcon(k.icon, 28)}</span>
         <div><div class="sh-title" id="sh-klus">${k.naam}</div><div class="plus" style="font-size:13px">${heeftPerKind(k) ? 'Beloning per kind' : '+' + k.waarde} · ${perTekst(k)}</div></div>
       </div>
       <div class="lbl">Voor wie?</div>
@@ -1687,7 +1712,7 @@ function sheetTaak() {
     <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-taak" data-scroll="sh-taak">
       <div class="sh-head">
-        <span class="icobox geel" style="width:48px;height:48px;border-radius:14px">${icon(taak.icon, 28)}</span>
+        <span class="icobox geel" style="width:48px;height:48px;border-radius:14px">${oIcon(taak.icon, 28)}</span>
         <div><div class="sh-title" id="sh-taak">${taak.naam}</div><div class="plus" style="font-size:13px">${heeftPerKind(taak) ? 'Sterren en beloning per kind' : taak.doel + ' sterren = +' + taak.beloning}</div></div>
       </div>
       <div class="lbl">Wie krijgt een ster?</div>

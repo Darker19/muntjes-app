@@ -93,6 +93,12 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 .klus { min-height: 112px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; }
 .klus.overig { border: 2px dashed #AEB6C1; }
 .icobox { width: 40px; height: 40px; border-radius: 12px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.icobox .ill, .ikoon .ill, .lrij > .ill { object-fit: contain; flex-shrink: 0; }
+.icobox:has(.ill) { background: none; width: 52px; height: 52px; }
+.icobox .ill { width: 100%; height: 100%; }
+.seg4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; width: 100%; }
+.seg4 .seg { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 6px 2px; font-size: 12px; }
+.seg4 .seg .mascotte { width: 22px; height: 22px; }
 .icobox.geel { background: #FFF6D6; }
 .icobox.wit { background: #fff; width: 44px; height: 44px; }
 .kl-naam { font-weight: 700; font-size: 14px; line-height: 1.25; }
