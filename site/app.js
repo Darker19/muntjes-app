@@ -54,7 +54,8 @@ const KLEUREN = [
   ['#7A4FD0', '#F1ECFB'], ['#0F7C74', '#E4F3F1'], ['#2457C5', '#E8EFFB'], ['#C2410C', '#FCEDE5'],
   ['#B0306A', '#FAE8F0'], ['#4D7C0F', '#EEF5E4'], ['#1D2733', '#ECEFF3']
 ];
-const ICOON_KEUZE = ['plate', 'table', 'kamer', 'bed', 'tooth', 'shirt', 'blocks', 'mand', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star', 'duim'];
+const ICOON_KEUZE = ['plate', 'table', 'kamer', 'bed', 'tooth', 'shirt', 'blocks', 'mand', 'bag', 'paw', 'broom', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'music', 'star', 'duim'];
+// trash, gift en ball staan niet meer in de keuze (2026-10-31), maar blijven in IC voor kaarten die ze al hebben.
 // Omschrijving per symbool (bij aanwijzen en onder de keuze in Beheer).
 const ICOON_NAAM = {
   plate: 'Tafel dekken', table: 'Tafel afruimen', kamer: 'Kamer opruimen', bed: 'Bed opmaken', tooth: 'Tanden poetsen',
@@ -807,7 +808,7 @@ const acties = {
   },
   nieuw(d) {
     const vrij = KLEUREN.find(([c]) => !s.kids.some((k) => k.kleur === c)) || KLEUREN[0];
-    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false, stil: false, vast: [] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag', perKind: editPerKind({}, 'klus') } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1, perKind: editPerKind({}, 'taak') } : { naam: '', icon: 'gift', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
+    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false, stil: false, vast: [] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag', perKind: editPerKind({}, 'klus') } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1, perKind: editPerKind({}, 'taak') } : { naam: '', icon: 'star', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
     zet({ edit: { soort: d.x, id: null, ...basis, zeker: false } });
   },
   editVeld(d) {
