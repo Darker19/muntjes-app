@@ -118,7 +118,7 @@ class MuntjesWidget : AppWidgetProvider() {
             val (mascotte, eenheid, een, veel) = when (thema) {
                 "eenhoorn" -> listOf(R.drawable.mascotte_eenhoorn, R.drawable.hart, "hartje", "hartjes")
                 "dino" -> listOf(R.drawable.mascotte_dino, R.drawable.vlees, "stukje vlees", "stukjes vlees")
-                else -> listOf(R.drawable.munt, R.drawable.munt, "muntje", "muntjes")
+                else -> listOf(R.drawable.mascotte_beer, R.drawable.munt, "muntje", "muntjes")
             }
             val saldo = d.optInt("saldo")
             val open = d.optInt("open")
