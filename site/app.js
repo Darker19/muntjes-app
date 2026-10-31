@@ -28,6 +28,7 @@ const IC = {
   moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
   ice: 'M8 10a4 4 0 1 1 8 0M7 10h10l-5 11z',
   star: 'M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z',
+  duim: 'M7 10v12M15 5.88L14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88z',
   broom: 'M19 3l-7 7M9 9l6 6M4 20c0-4 3-8 6-10l4 4c-2 3-6 6-10 6z',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
   game: 'M6 9h12a4 4 0 0 1 0 8c-1.5 0-2.5-1-3-2H9c-.5 1-1.5 2-3 2a4 4 0 0 1 0-8zM8 11v3M6.5 12.5h3M15.5 12h.01M17.5 14h.01',
@@ -53,13 +54,13 @@ const KLEUREN = [
   ['#7A4FD0', '#F1ECFB'], ['#0F7C74', '#E4F3F1'], ['#2457C5', '#E8EFFB'], ['#C2410C', '#FCEDE5'],
   ['#B0306A', '#FAE8F0'], ['#4D7C0F', '#EEF5E4'], ['#1D2733', '#ECEFF3']
 ];
-const ICOON_KEUZE = ['plate', 'table', 'kamer', 'bed', 'tooth', 'shirt', 'blocks', 'mand', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star'];
+const ICOON_KEUZE = ['plate', 'table', 'kamer', 'bed', 'tooth', 'shirt', 'blocks', 'mand', 'bag', 'paw', 'broom', 'trash', 'tablet', 'tv', 'game', 'book', 'moon', 'ice', 'gift', 'music', 'ball', 'star', 'duim'];
 // Omschrijving per symbool (bij aanwijzen en onder de keuze in Beheer).
 const ICOON_NAAM = {
   plate: 'Tafel dekken', table: 'Tafel afruimen', kamer: 'Kamer opruimen', bed: 'Bed opmaken', tooth: 'Tanden poetsen',
   shirt: 'Aankleden', blocks: 'Speelgoed opruimen', mand: 'Boodschappen', bag: 'Schooltas', paw: 'Huisdier voeren',
   broom: 'Vegen', trash: 'Afval weggooien', tablet: 'Tablet', tv: 'Tv kijken', game: 'Spelletje', book: 'Voorlezen',
-  moon: 'Later naar bed', ice: 'Toetje', gift: 'Cadeautje', music: 'Muziek', ball: 'Buiten spelen', star: 'Ster'
+  moon: 'Later naar bed', ice: 'Toetje', gift: 'Cadeautje', music: 'Muziek', ball: 'Buiten spelen', star: 'Ster', duim: 'Goed gedaan'
 };
 const DUREN = [0, 5, 10, 15, 20, 30, 45, 60];
 const THEMAS = [['geen', 'Standaard'], ['eenhoorn', 'Eenhoorns'], ['dino', 'Dinosaurussen']];
@@ -68,7 +69,7 @@ const SPELLEN = [['', 'Geen'], ['https://spelletjes.darkesttimes.nl/', 'Flesjes 
 const spelNaam = (url) => (SPELLEN.find(([u]) => u === url) || [url, 'Spelletje'])[1];
 
 // Getekende plaatjes voor de kind-app, per thema. Iconen zonder plaatje blijven een lijnicoon.
-const PLAATJES = { plate: 'tafel-dekken', table: 'tafel-afruimen', blocks: 'speelgoed-opruimen', mand: 'boodschappen', paw: 'huisdier-voeren', tooth: 'tanden-poetsen', tablet: 'tablet', game: 'spelletje', tv: 'tv', book: 'voorleesverhaal', moon: 'later-naar-bed', ice: 'toetje', kamer: 'kamer-opruimen', bed: 'bed-opmaken', shirt: 'aankleden', bag: 'schooltas' };
+const PLAATJES = { plate: 'tafel-dekken', table: 'tafel-afruimen', blocks: 'speelgoed-opruimen', mand: 'boodschappen', paw: 'huisdier-voeren', tooth: 'tanden-poetsen', tablet: 'tablet', game: 'spelletje', tv: 'tv', book: 'voorleesverhaal', moon: 'later-naar-bed', ice: 'toetje', kamer: 'kamer-opruimen', bed: 'bed-opmaken', shirt: 'aankleden', bag: 'schooltas', broom: 'bezem', music: 'muziek', duim: 'duim-omhoog' };
 const PLAATJE_MAP = { geen: 'neutral', eenhoorn: 'unicorn', dino: 'dinosaurus' };
 const plaatje = (d, thema, size, sw) => (PLAATJES[d] ? `<img class="ill" src="img/${PLAATJE_MAP[thema] || 'neutral'}/${PLAATJES[d]}.webp" width="${size}" height="${size}" alt="">` : icon(d, size, sw));
 
@@ -1789,7 +1790,7 @@ function renderKind() {
 
   const log = nieuwsteEerst(s.tx.filter((t) => t.kid === kind.id)).map((t) => {
     const act = t.type === 'klus' ? klusVan(t.ref) : t.type === 'beloning' ? belVan(t.ref) : t.type === 'ster' || t.type === 'taakklaar' ? taakVan(t.ref) : null;
-    const ic = act ? act.icon : t.amount < 0 ? IC.minus : IC.star;
+    const ic = act ? act.icon : t.amount < 0 ? IC.minus : t.type === 'overig' ? 'duim' : IC.star;
     const rood = t.type === 'overig' && t.amount < 0;
     const rij = rood ? ' rood' : t.status === 'aangevraagd' ? ' wacht' : t.status === 'afgewezen' ? ' af' : '';
     const kleur = t.status === 'aangevraagd' ? 'wachtc' : t.status === 'afgewezen' ? 'afc' : t.amount < 0 ? 'neg' : 'pos';
