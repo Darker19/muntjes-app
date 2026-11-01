@@ -1763,7 +1763,8 @@ function logRij(t, kid) {
   const d = new Date(t.ts);
   const status = t.status === 'aangevraagd' ? 'wacht' : t.status === 'afgewezen' ? (t.amount < 0 ? 'afgewezen' : 'niet goedgekeurd') : '';
   const n = Math.abs(t.amount);
-  const bedrag = t.type === 'ster' ? '+1' + ster(18, t.status !== 'afgewezen') : (t.amount < 0 ? '−' : '+') + n;
+  // Bedrag met het icoontje van de eenheid van dit kind (muntje, hartje of stukje vlees), net als de ster bij een taak.
+  const bedrag = t.type === 'ster' ? '+1' + ster(18, t.status !== 'afgewezen') : (t.amount < 0 ? '−' : '+') + n + valuta(kid).icoon(18);
   return `<div class="lrow${rij}">
     <span class="lico">${oIcon(ic, 22)}</span>
     <div class="ltxt">
@@ -1771,7 +1772,7 @@ function logRij(t, kid) {
       <span class="muted">${pad(d.getHours())}:${pad(d.getMinutes())} · ${esc(door)}</span>
       ${t.msg ? `<q>${esc(t.msg)}</q>` : ''}
     </div>
-    <div class="lamt"><span class="n ${kleur}">${bedrag}</span><span class="muted">${t.type === 'ster' ? '' : valuta(kid).woord(n)}${status ? (t.type === 'ster' ? '' : ' · ') + status : ''}</span></div>
+    <div class="lamt"><span class="n ${kleur}">${bedrag}</span><span class="muted">${status}</span></div>
   </div>`;
 }
 function sheetLog() {
@@ -1793,7 +1794,7 @@ function sheetLog() {
     const plus = goed.filter((t) => t.amount > 0).reduce((a, t) => a + t.amount, 0);
     const min = goed.filter((t) => t.amount < 0).reduce((a, t) => a - t.amount, 0);
     const sterren = goed.filter((t) => t.type === 'ster').length;
-    const totaal = [plus ? `<span class="pos">+${plus} verdiend</span>` : '', min ? `<span class="neg">−${min} uitgegeven</span>` : '', sterren ? `<span class="lster">${sterren} ${ster(14)}</span>` : ''].filter(Boolean).join(' · ');
+    const totaal = [plus ? `<span class="pos lster">+${plus} ${v.icoon(14)} verdiend</span>` : '', min ? `<span class="neg lster">−${min} ${v.icoon(14)} uitgegeven</span>` : '', sterren ? `<span class="lster">${sterren} ${ster(14)}</span>` : ''].filter(Boolean).join(' · ');
     return `<section class="ldag">
       <h3 class="ldag-kop"><span>${dagLabel(dag.begin)}</span><span class="ldag-tot">${totaal}</span></h3>
       <div class="stack" style="gap:8px">${dag.tx.map((t) => logRij(t, kid)).join('')}</div>

@@ -226,6 +226,7 @@ button.kcard:active { background: var(--grey-bg); }
 .ltxt q { font-size: 13px; font-style: italic; color: var(--muted2); }
 .lamt { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
 .lamt .n { font-family: Fredoka, sans-serif; font-size: 22px; font-weight: 600; }
+.lamt .n { display: inline-flex; align-items: center; gap: 3px; }
 .pos { color: var(--green); }
 .neg { color: var(--red); }
 .wachtc { color: #A04A00; }
