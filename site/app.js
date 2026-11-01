@@ -1041,6 +1041,8 @@ const acties = {
     if (!b || !b.spel || (b.duur && !t)) return;
     if (t && t.status === 'wacht') acties.timer({ id: t.id, x: 'start' });
     const url = new URL(b.spel);
+    // De demo speelt op de preview van het spel: het echte spel start alleen met een sleutel van Muntjes.
+    if (DEMO && url.hostname === 'spelletjes.darkesttimes.nl') url.hostname = 'spelletjes-preview.darkesttimes.nl';
     if (t && DEMO) url.searchParams.set('speeltijd', Math.ceil(timerRest(t)));
     if (t && !DEMO) {
       // Venster meteen openen (anders blokkeert de browser het), daarna het adres met de sleutel.
