@@ -79,7 +79,16 @@ body.bare .tablet { height: calc(100dvh - var(--barh)); border: 0; border-radius
 
 .kcard { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
 .kname { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+button.kcard { text-align: left; width: 100%; }
+button.kcard:active { background: var(--grey-bg); }
+.klog { margin-top: 2px; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 800; color: var(--accent); }
+.ldag { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.ldag-kop { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; margin: 4px 0 0; font-size: 15px; font-weight: 800; }
+.ldag-tot { font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.lster { display: inline-flex; align-items: center; gap: 2px; color: #B45309; }
+.sheet .lrow { flex-shrink: 0; }
 .avatar { border-radius: 50%; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; flex-shrink: 0; }
+.kbal > svg { flex-shrink: 0; }
 .kbal { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
 .pkind { flex-shrink: 0; border-bottom: 1px solid var(--line2); padding-bottom: 8px; }
 .pkind.uit .col span { color: var(--muted); }

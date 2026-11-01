@@ -681,6 +681,7 @@ const acties = {
     if (!DEMO && d.id === 'beheer' && rol === 'ouder') laadBeheer();
   },
   sluit() { zet({ sheet: null, bericht: '', ovZeker: false }); },
+  logOpen(d) { if (kidVan(d.id)) zet({ sheet: { type: 'log', id: d.id } }); },
 
   klusOpen(d) {
     if (!s.kids.length) { melding('Voeg eerst een kind toe in Beheer'); return; }
@@ -1199,7 +1200,7 @@ function renderOuder() {
         </button>`).join('')}
     </nav>
     ${s.toast ? `<div class="toast" role="status">${coin(22)}<span>${esc(s.toast)}</span></div>` : ''}
-    ${sheetKlus()}${sheetTaak()}${sheetOverig()}${sheetBewerk()}${sheetPin()}${sheetGebruiker()}${sheetTerugzet()}`;
+    ${sheetKlus()}${sheetTaak()}${sheetOverig()}${sheetLog()}${sheetBewerk()}${sheetPin()}${sheetGebruiker()}${sheetTerugzet()}`;
 }
 
 function schermMelden() {
@@ -1211,12 +1212,13 @@ function schermMelden() {
   }
   const kaarten = s.kids.map((k) => {
     const st = stats(k.id);
-    return `<div class="kcard">
+    return `<button type="button" class="kcard" data-a="logOpen" data-id="${k.id}" aria-label="Logboek van ${esc(k.naam)} deze week">
       <div class="kname">${avatar(k)}<b>${k.naam}</b></div>
       <div class="kbal">${valuta(k).icoon(22)}<span class="num">${st.beschikbaar}</span><span>${valuta(k).woord(st.beschikbaar)}</span>
         ${takenVan(k.id).length ? `<span class="kster" role="img" aria-label="${sterrenDezeWeek(k.id)} ${sterrenDezeWeek(k.id) === 1 ? 'ster' : 'sterren'} deze week">${ster(20)}<b>${sterrenDezeWeek(k.id)}</b></span>` : ''}</div>
       <div class="muted">Deze week ${st.week}/${s.maxWeek} verdiend</div>
-    </div>`;
+      <span class="klog">Bekijk logboek ${icon(IC.chev, 14, 2.4)}</span>
+    </button>`;
   }).join('');
   const klusjes = s.klusjes.map((k) => `
     <button type="button" class="klus" data-a="klusOpen" data-id="${k.id}">
@@ -1722,6 +1724,77 @@ function sheetTaak() {
       <label class="lbl" for="bericht">Berichtje (optioneel)</label>
       <input class="inp" id="bericht" data-input="bericht" value="${esc(s.bericht)}" placeholder="Goed bezig!" autocomplete="off">
       <button type="button" class="btn btn-soft" data-a="sluit">Annuleren</button>
+    </div>
+  </div>`;
+}
+
+// Logboek per kind voor de ouders: alles van de lopende week, per dag (vandaag bovenaan).
+// Begint vanzelf weer leeg als de week opnieuw begint; saldo en geschiedenis blijven gewoon bewaard.
+function dagLabel(begin) {
+  const d = new Date(begin);
+  const datum = d.getDate() + ' ' + MAANDEN[d.getMonth()];
+  if (begin === dagStart()) return 'Vandaag · ' + datum;
+  const gisteren = new Date(dagStart()); gisteren.setDate(gisteren.getDate() - 1);
+  if (begin === gisteren.getTime()) return 'Gisteren · ' + datum;
+  return WEEKDAGEN[d.getDay()][0].toUpperCase() + WEEKDAGEN[d.getDay()].slice(1) + ' ' + datum;
+}
+function logRij(t, kid) {
+  const act = t.type === 'klus' ? klusVan(t.ref, kid.id) : t.type === 'beloning' ? belVan(t.ref) : t.type === 'ster' || t.type === 'taakklaar' ? taakVan(t.ref) : null;
+  const ic = act ? act.icon : t.amount < 0 ? 'minus' : t.type === 'overig' ? 'duim' : 'star';
+  const rij = t.status === 'aangevraagd' ? ' wacht' : t.status === 'afgewezen' ? ' af' : t.type === 'overig' && t.amount < 0 ? ' rood' : '';
+  const kleur = t.status === 'aangevraagd' ? 'wachtc' : t.status === 'afgewezen' ? 'afc' : t.amount < 0 ? 'neg' : 'pos';
+  const door = (t.bron === 'kind' ? (t.type === 'beloning' ? 'zelf aangevraagd' : 'zelf gemeld') : 'door ' + (t.door || 'papa'))
+    + (t.beslistDoor && t.status !== 'aangevraagd' ? (t.status === 'goed' ? ', goedgekeurd door ' : ', afgewezen door ') + t.beslistDoor : '');
+  const d = new Date(t.ts);
+  const status = t.status === 'aangevraagd' ? 'wacht' : t.status === 'afgewezen' ? (t.amount < 0 ? 'afgewezen' : 'niet goedgekeurd') : '';
+  const n = Math.abs(t.amount);
+  const bedrag = t.type === 'ster' ? '+1' + ster(18, t.status !== 'afgewezen') : (t.amount < 0 ? '−' : '+') + n;
+  return `<div class="lrow${rij}">
+    <span class="lico">${oIcon(ic, 22)}</span>
+    <div class="ltxt">
+      <b>${esc(t.label)}</b>
+      <span class="muted">${pad(d.getHours())}:${pad(d.getMinutes())} · ${esc(door)}</span>
+      ${t.msg ? `<q>${esc(t.msg)}</q>` : ''}
+    </div>
+    <div class="lamt"><span class="n ${kleur}">${bedrag}</span><span class="muted">${t.type === 'ster' ? '' : valuta(kid).woord(n)}${status ? (t.type === 'ster' ? '' : ' · ') + status : ''}</span></div>
+  </div>`;
+}
+function sheetLog() {
+  if (!s.sheet || s.sheet.type !== 'log') return '';
+  const kid = kidVan(s.sheet.id);
+  if (!kid) return '';
+  const van = weekStart();
+  const mijn = nieuwsteEerst(s.tx.filter((t) => t.kid === kid.id && t.type !== 'begin' && t.ts >= van));
+  const dagen = [];
+  for (const t of mijn) {
+    const d = new Date(t.ts);
+    const begin = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    if (!dagen.length || dagen[dagen.length - 1].begin !== begin) dagen.push({ begin, tx: [] });
+    dagen[dagen.length - 1].tx.push(t);
+  }
+  const v = valuta(kid);
+  const blokken = dagen.map((dag) => {
+    const goed = dag.tx.filter((t) => t.status === 'goed');
+    const plus = goed.filter((t) => t.amount > 0).reduce((a, t) => a + t.amount, 0);
+    const min = goed.filter((t) => t.amount < 0).reduce((a, t) => a - t.amount, 0);
+    const sterren = goed.filter((t) => t.type === 'ster').length;
+    const totaal = [plus ? `<span class="pos">+${plus} verdiend</span>` : '', min ? `<span class="neg">−${min} uitgegeven</span>` : '', sterren ? `<span class="lster">${sterren} ${ster(14)}</span>` : ''].filter(Boolean).join(' · ');
+    return `<section class="ldag">
+      <h3 class="ldag-kop"><span>${dagLabel(dag.begin)}</span><span class="ldag-tot">${totaal}</span></h3>
+      <div class="stack" style="gap:8px">${dag.tx.map((t) => logRij(t, kid)).join('')}</div>
+    </section>`;
+  }).join('');
+  return `<div class="sheet-wrap">
+    <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-log" data-scroll="sh-log">
+      <div class="sh-title" id="sh-log">Logboek van ${esc(kid.naam)}</div>
+      ${s.kids.length > 1 ? `<div class="pills">${s.kids.map((k) => {
+        const aan = k.id === kid.id;
+        return `<button type="button" class="pill" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="logOpen" data-id="${k.id}">${esc(k.naam)}</button>`;
+      }).join('')}</div>` : ''}
+      <p class="sec-sub" style="margin:0">Deze week, sinds ${WEEKDAGEN[new Date(van).getDay()]} ${new Date(van).getDate()} ${MAANDEN[new Date(van).getMonth()]}. Na de weekreset begint het logboek weer leeg; het saldo blijft gewoon staan.</p>
+      ${blokken || `<div class="empty">${esc(kid.naam)} heeft deze week nog geen ${v.veel} of sterren gekregen of uitgegeven.</div>`}
+      <button type="button" class="btn btn-soft" data-a="sluit">Sluiten</button>
     </div>
   </div>`;
 }
