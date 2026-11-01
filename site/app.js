@@ -10,6 +10,9 @@ const PARAMS = new URLSearchParams(location.search);
 const DEMO = PARAMS.has('demo') || (!PARAMS.has('echt') && (/github\.io$/.test(location.hostname) || ['localhost', '127.0.0.1', ''].includes(location.hostname)));
 const DATA_KEYS = ['kids', 'klusjes', 'beloningen', 'taken', 'focus', 'maxFocus', 'tx', 'timers', 'kindMelden', 'maxWeek', 'weekBegin', 'nextId'];
 const TOKEN_SLEUTEL = 'muntjes-apparaat';
+// Draait de kind-app in de Android-app (Muntjes widget-app) in plaats van in Chrome?
+// Dan opent het spel in hetzelfde venster; de terugknop van de tablet gaat terug naar Muntjes.
+const IN_APP = /MuntjesApp\//.test(navigator.userAgent);
 
 const IC = {
   plate: 'M4 3v18M2 3v5a2 2 0 0 0 4 0V3M10 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0',
@@ -1044,6 +1047,16 @@ const acties = {
     // De demo speelt op de preview van het spel: het echte spel start alleen met een sleutel van Muntjes.
     if (DEMO && url.hostname === 'spelletjes.darkesttimes.nl') url.hostname = 'spelletjes-preview.darkesttimes.nl';
     if (t && DEMO) url.searchParams.set('speeltijd', Math.ceil(timerRest(t)));
+    if (t && !DEMO && IN_APP) {
+      const r = await api('speelsleutel', undefined, '&timer=' + encodeURIComponent(t.id));
+      if (!r.ok) { melding(r.data.fout || 'Het spelletje kan nu niet starten.'); return; }
+      url.searchParams.set('muntjes', location.origin + location.pathname.replace(/[^/]*$/, ''));
+      url.searchParams.set('timer', t.id);
+      url.searchParams.set('sleutel', r.data.sleutel);
+      location.href = url.href;
+      return;
+    }
+    if (IN_APP) { location.href = url.href; return; }
     if (t && !DEMO) {
       // Venster meteen openen (anders blokkeert de browser het), daarna het adres met de sleutel.
       const w = window.open('about:blank', '_blank');

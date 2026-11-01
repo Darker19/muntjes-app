@@ -174,7 +174,7 @@ class MainActivity : Activity() {
             }
         })
         lijst.addView(knop("Muntjes openen") {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Api.BASIS)))
+            startActivity(Intent(this, KindActivity::class.java))
         })
         lijst.addView(knop("Ontkoppelen") {
             AlertDialog.Builder(this)

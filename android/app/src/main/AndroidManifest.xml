@@ -9,11 +9,27 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_naam"
+        android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
-        <!-- Koppelen en uitleg -->
+        <!-- De kind-app (Muntjes) in een eigen venster, zonder Chrome -->
+        <activity
+            android:name=".KindActivity"
+            android:label="@string/kind_naam"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Koppelen, updates en uitleg (voor papa en mama) -->
         <activity
             android:name=".MainActivity"
+            android:label="@string/instellingen_naam"
+            android:taskAffinity="nl.darkesttimes.muntjes.instellingen"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

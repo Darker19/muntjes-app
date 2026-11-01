@@ -86,9 +86,9 @@ class MuntjesWidget : AppWidgetProvider() {
             val sleutel = Opslag.sleutel(c)
             val d = Opslag.data(c)
 
-            // Tikken: niet gekoppeld → koppelen; wel gekoppeld → de kind-app openen.
+            // Tikken: niet gekoppeld → koppelen; wel gekoppeld → de kind-app openen (in deze app, niet in Chrome).
             val tik = if (sleutel == null) Intent(c, MainActivity::class.java)
-            else Intent(Intent.ACTION_VIEW, Uri.parse(Api.BASIS))
+            else Intent(c, KindActivity::class.java)
             v.setOnClickPendingIntent(R.id.widget, PendingIntent.getActivity(c, 0, tik,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
 

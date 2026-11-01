@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_naam">Muntjes widget</string>
+    <string name="app_naam">Muntjes</string>
+    <string name="kind_naam">Muntjes</string>
+    <string name="instellingen_naam">Muntjes widget</string>
     <string name="widget_uitleg">Het saldo van je kind op het beginscherm</string>
 </resources>
