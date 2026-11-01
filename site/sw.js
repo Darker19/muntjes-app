@@ -4,7 +4,7 @@
  * zonder internet wordt de laatst bewaarde versie getoond. api.php gaat nooit via de cache.
  * Toont ook de pushmeldingen ("Tijd is om") die de server stuurt.
  */
-const CACHE = "muntjes-v2";
+const CACHE = "muntjes-v3";
 const SHELL = ["./", "style.css", "app.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
@@ -44,6 +44,7 @@ self.addEventListener("push", e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { /* geen JSON */ }
   const timer = String(d.tag || "").startsWith("timer");
+  const aanvraag = String(d.tag || "").startsWith("aanvraag");
   e.waitUntil(self.registration.showNotification(d.titel || "Muntjes", {
     body: d.tekst || "",
     tag: d.tag || "muntjes",
@@ -52,11 +53,11 @@ self.addEventListener("push", e => {
     icon: "icons/icon-192.png",
     badge: "icons/icon-192.png",
     vibrate: [300, 100, 300, 100, 600],
-    data: { scherm: timer ? "timers" : "" }
+    data: { scherm: timer ? "timers" : aanvraag ? "aanvragen" : "" }
   }));
 });
 
-// Tik op de melding: de app openen (of naar voren halen), bij een timer op het scherm Timers.
+// Tik op de melding: de app openen (of naar voren halen), bij een timer op Timers, bij een aanvraag op Aanvragen.
 self.addEventListener("notificationclick", e => {
   e.notification.close();
   const scherm = (e.notification.data || {}).scherm || "";

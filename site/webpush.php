@@ -145,6 +145,34 @@ function timers_controleren(): void {
     if ($nieuw !== $gemeld) zet_instelling('gemelde_timers', json_encode($nieuw));
 }
 
+// Nieuwe aanvragen van een tablet (klusje gemeld, beloning aangevraagd, taak gemeld):
+// één melding per aanvraag naar alle ouders. Wordt aangeroepen na het opslaan.
+function aanvragen_melden(array $oud, array $nieuw, string $kid): void {
+    global $db;
+    $bekend = [];
+    foreach ($oud['tx'] ?? [] as $t) if (isset($t['id'])) $bekend[(string)$t['id']] = true;
+    $kind = $kid;
+    foreach ($nieuw['kids'] ?? [] as $k) if (($k['id'] ?? '') === $kid) $kind = (string)($k['naam'] ?? $kid);
+    $ouders = null;
+    foreach ($nieuw['tx'] ?? [] as $t) {
+        if (!is_array($t) || isset($bekend[(string)($t['id'] ?? '')])) continue;
+        if (($t['status'] ?? '') !== 'aangevraagd' || ($t['bron'] ?? '') !== 'kind' || ($t['kid'] ?? '') !== $kid) continue;
+        $type = (string)($t['type'] ?? '');
+        $n = abs((int)($t['amount'] ?? 0));
+        [$titel, $bedrag] = match ($type) {
+            'klus' => [$kind . ' meldt een klusje', '+' . $n],
+            'ster' => [$kind . ' meldt een taak', '+1 ⭐'],
+            'beloning' => [$kind . ' vraagt een beloning', '−' . $n],
+            default => [$kind . ' vraagt iets aan', ''],
+        };
+        $tekst = trim((string)($t['label'] ?? '') . ($bedrag !== '' ? ' (' . $bedrag . ')' : ''));
+        $msg = trim((string)($t['msg'] ?? ''));
+        if ($msg !== '') $tekst .= ' · "' . mb_substr($msg, 0, 80) . '"';
+        $ouders ??= array_map('intval', $db->query("SELECT id FROM gebruikers WHERE rol = 'ouder'")->fetchAll(PDO::FETCH_COLUMN));
+        push_naar($ouders, ['titel' => $titel, 'tekst' => $tekst, 'tag' => 'aanvraag-' . ($t['id'] ?? '')]);
+    }
+}
+
 function push_ontvangers(array $timer): array {
     global $db;
     $ids = array_map('intval', $db->query("SELECT id FROM gebruikers WHERE rol = 'ouder'")->fetchAll(PDO::FETCH_COLUMN));

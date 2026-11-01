@@ -718,11 +718,18 @@ switch ($actie) {
         $db->exec('COMMIT');
         $transactie = false;
         // Pas na het antwoord de widgets een seintje geven, zodat opslaan niet trager wordt.
-        $teSturen = widgets_met_wijziging($s ? json_decode($s['data'], true) : [], $in['data']);
-        if ($teSturen) {
-            register_shutdown_function(function () use ($teSturen) {
+        // Ook de ouders een melding sturen bij een nieuwe aanvraag van een tablet.
+        $oudeData = $s ? json_decode($s['data'], true) : [];
+        $teSturen = widgets_met_wijziging($oudeData, $in['data']);
+        $aanvraagKid = $w['rol'] === 'kind' ? $w['kid'] : null;
+        if ($teSturen || $aanvraagKid) {
+            register_shutdown_function(function () use ($teSturen, $aanvraagKid, $oudeData, $in) {
                 if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
-                stuur_push($teSturen);
+                if ($teSturen) stuur_push($teSturen);
+                if ($aanvraagKid) {
+                    try { aanvragen_melden($oudeData, $in['data'], $aanvraagKid); }
+                    catch (Throwable $e) { error_log('muntjes aanvraag-push: ' . $e->getMessage()); }
+                }
             });
         }
         out(['versie' => $huidig + 1]);

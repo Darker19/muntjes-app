@@ -412,7 +412,7 @@ async function start() {
   if (rol === 'ouder') zet((st) => samenvoegen(st));
   if (rol === 'ouder' && s.scherm === 'beheer') laadBeheer();
   if (volwassene()) {
-    if (PARAMS.get('scherm') === 'timers') s = { ...s, scherm: 'timers' };
+    if (['timers', 'aanvragen'].includes(PARAMS.get('scherm'))) s = { ...s, scherm: PARAMS.get('scherm') };
     laadPush();
   }
   render();
@@ -1151,7 +1151,7 @@ function weergaveBlok() {
 function pushBlok() {
   if (DEMO) {
     return `<h2 class="sec">Meldingen</h2>
-    <div class="lijst"><div class="lrij"><span class="col"><span>Melding als een timer afloopt</span><small>Alleen in de echte app, op je eigen telefoon</small></span></div></div>`;
+    <div class="lijst"><div class="lrij"><span class="col"><span>Melding bij een aanvraag en als een timer afloopt</span><small>Alleen in de echte app, op je eigen telefoon</small></span></div></div>`;
   }
   const uitleg = {
     aan: 'Aan: ook als de app dicht is',
@@ -1165,7 +1165,7 @@ function pushBlok() {
   return `<h2 class="sec">Meldingen</h2>
     <div class="lijst">
       <button type="button" class="lrij" data-a="pushToggle" aria-pressed="${pushStand === 'aan'}" ${kan ? '' : 'disabled'}>
-        <span class="col"><span>Melding als een timer afloopt</span><small>${uitleg}</small></span>
+        <span class="col"><span>${rol === 'ouder' ? 'Melding bij een aanvraag en als een timer afloopt' : 'Melding als een timer afloopt'}</span><small>${uitleg}</small></span>
         ${kan ? `<span class="switch${pushStand === 'aan' ? ' on' : ''}"><span></span></span>` : ''}
       </button>
       ${pushStand === 'aan' ? '<button type="button" class="lrij" data-a="pushTest"><span class="grow">Testmelding sturen</span></button>' : ''}
