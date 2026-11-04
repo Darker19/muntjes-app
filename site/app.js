@@ -70,6 +70,8 @@ const DUREN = [0, 5, 10, 15, 20, 30, 45, 60];
 const THEMAS = [['geen', 'Standaard'], ['eenhoorn', 'Eenhoorns'], ['dino', 'Dinosaurussen']];
 // Spelletjes die een beloning direct kan openen.
 const SPELLEN = [['', 'Geen'], ['https://spelletjes.darkesttimes.nl/', 'Flesjes Sorteren']];
+// Beheerpagina van het spel (pincode van een kind resetten); de demo gaat naar de preview van het spel.
+const SPEL_BEHEER = 'https://' + (DEMO ? 'spelletjes-preview' : 'spelletjes') + '.darkesttimes.nl/beheer.html';
 const spelNaam = (url) => (SPELLEN.find(([u]) => u === url) || [url, 'Spelletje'])[1];
 
 // Getekende plaatjes voor de kind-app, per thema. Iconen zonder plaatje blijven een lijnicoon.
@@ -525,9 +527,9 @@ function belStatus(kid, b) {
   return 'vrij';
 }
 
-// Timer van een goedgekeurde spelletje-beloning die nog niet om is.
+// Timer van een spelletje-beloning die nog niet om is: goedgekeurd of gratis aangezet door een ouder.
 function spelTimer(kid, b) {
-  if (!b || !b.spel || !b.duur) return null;
+  if (!b || !b.spel) return null;
   return s.timers.find((t) => t.kid === kid && t.ref === b.id && !timerKlaar(t)) || null;
 }
 
@@ -716,6 +718,37 @@ const acties = {
       : '⭐ voor ' + kid.naam + ' · ' + taak.naam + ' (' + sterTx(kid.id, taak.id, 'goed').length + '/' + taak.doel + ')');
   },
 
+  // Spelletje gratis aanzetten: een timer zonder muntjes. Het kind ziet "Speel nu" op de kaart.
+  gratisOpen() {
+    const b = s.beloningen.find((x) => x.spel);
+    if (!s.kids.length || !b) return;
+    zet({ sheet: { type: 'gratis' }, grKid: kidVan(s.grKid) ? s.grKid : s.kids[0].id, grBel: b.id, grMin: b.duur || 15 });
+  },
+  grKid(d) { zet({ grKid: d.id }); },
+  grBel(d) { const b = belVan(d.id); if (b) zet({ grBel: b.id, grMin: b.duur || 15 }); },
+  grMin(d) { zet({ grMin: Math.min(120, Math.max(5, s.grMin + (d.x === '+' ? 5 : -5))) }); },
+  grBevestig() {
+    const b = belVan(s.grBel);
+    const kid = kidVan(s.grKid);
+    if (!b || !b.spel || !kid) return;
+    const sec = s.grMin * 60;
+    const nu = Date.now();
+    const f = snelheid();
+    const naam = kid.naam;
+    const min = s.grMin;
+    zet((st) => {
+      // Staat dit spelletje al open voor dit kind? Dan komen de minuten erbij.
+      const open = st.timers.find((t) => t.kid === kid.id && t.ref === b.id && !timerKlaar(t));
+      if (!open) return { sheet: null, timers: [...st.timers, { id: 'g' + nu.toString(36), kid: kid.id, ref: b.id, naam: b.naam, totaal: sec, rest: sec, status: 'wacht', eind: null, gratis: true }] };
+      return { sheet: null, timers: st.timers.map((t) => {
+        if (t.id !== open.id) return t;
+        return t.status === 'loopt'
+          ? { ...t, totaal: t.totaal + sec, eind: Math.max(t.eind, nu) + (sec * 1000) / f }
+          : { ...t, totaal: t.totaal + sec, rest: timerRest(t) + sec };
+      }) };
+    });
+    melding(b.naam + ' staat aan voor ' + naam + ' · ' + min + ' min');
+  },
   overigOpen() {
     if (!s.kids.length) { melding('Voeg eerst een kind toe in Beheer'); return; }
     zet({ sheet: { type: 'overig' }, ovKid: kidVan(s.ovKid) ? s.ovKid : s.kids[0].id, ovSign: 1, ovAmt: 1, ovReden: '', ovZeker: false });
@@ -1215,7 +1248,7 @@ function renderOuder() {
         </button>`).join('')}
     </nav>
     ${s.toast ? `<div class="toast" role="status">${coin(22)}<span>${esc(s.toast)}</span></div>` : ''}
-    ${sheetKlus()}${sheetTaak()}${sheetOverig()}${sheetLog()}${sheetBewerk()}${sheetPin()}${sheetGebruiker()}${sheetTerugzet()}`;
+    ${sheetKlus()}${sheetTaak()}${sheetOverig()}${sheetGratis()}${sheetLog()}${sheetBewerk()}${sheetPin()}${sheetGebruiker()}${sheetTerugzet()}`;
 }
 
 function schermMelden() {
@@ -1298,6 +1331,7 @@ function schermTimers() {
   const wachtHtml = wacht.map((t) => `
     <div class="tcard">
       <div class="grow"><b>${esc(label(t))}</b><div class="tnum sm">${mmss(timerRest(t))}</div></div>
+      ${t.gratis ? `<button type="button" class="btn btn-outline" data-a="timer" data-id="${t.id}" data-x="stop">Weghalen</button>` : ''}
       <button type="button" class="btn btn-primary" data-a="timer" data-id="${t.id}" data-x="start">Start</button>
     </div>`).join('');
   const lopendHtml = lopend.map((t) => {
@@ -1322,6 +1356,10 @@ function schermTimers() {
     </div>`;
   }).join('');
   return `
+    ${s.kids.length && s.beloningen.some((b) => b.spel) ? `
+    <h2 class="sec">Spelletje aanzetten</h2>
+    <p class="sec-sub">Gratis, zonder muntjes. Het kind ziet "Speel nu" op de tablet.</p>
+    <button type="button" class="btn btn-primary vol mb" data-a="gratisOpen">${icon(IC.game, 18, 2)} Spelletje aanzetten</button>` : ''}
     <h2 class="sec">Klaar om te starten</h2>
     ${wacht.length ? `<div class="stack">${wachtHtml}</div>` : '<p class="muted">Na goedkeuring van tablet- of tv-tijd verschijnt hier een timer.</p>'}
     <h2 class="sec sp">Lopende timers</h2>
@@ -1406,6 +1444,10 @@ function schermBeheer() {
       ${DEMO
         ? '<div class="lrij"><span class="grow">Pincode</span><span class="r">Alleen in de echte app</span></div>'
         : `<button type="button" class="lrij" data-a="pinOpen"><span class="grow">Mijn pincode</span><span class="r">Wijzigen</span>${icon(IC.chev, 18, 2)}</button>`}
+    </div>
+    <h2 class="sec">Spelletjes</h2>
+    <div class="lijst">
+      <a class="lrij" href="${SPEL_BEHEER}" target="_blank" rel="noopener"><span class="col"><span>Beheer Flesjes Sorteren</span><small>Pincode van een kind resetten of ontgrendelen. Inloggen met het beheerwachtwoord van het spel.</small></span>${icon(IC.chev, 18, 2)}</a>
     </div>
     ${weergaveBlok()}
     ${pushBlok()}
@@ -1815,6 +1857,39 @@ function sheetLog() {
   </div>`;
 }
 
+function sheetGratis() {
+  if (!s.sheet || s.sheet.type !== 'gratis') return '';
+  const spellen = s.beloningen.filter((b) => b.spel);
+  const b = belVan(s.grBel);
+  const kid = kidVan(s.grKid);
+  if (!b || !kid) return '';
+  const open = spelTimer(kid.id, b);
+  return `<div class="sheet-wrap">
+    <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-gr" data-scroll="sh-gr">
+      <div class="sh-title" id="sh-gr">Spelletje aanzetten</div>
+      <div class="pills">
+        ${s.kids.map((k) => {
+          const aan = k.id === s.grKid;
+          return `<button type="button" class="pill" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="grKid" data-id="${k.id}">${esc(k.naam)}</button>`;
+        }).join('')}
+      </div>
+      ${spellen.length > 1 ? `<div class="pills wrap">${spellen.map((x) => `<button type="button" class="pill${x.id === b.id ? ' on' : ''}" aria-pressed="${x.id === b.id}" data-a="grBel" data-id="${x.id}">${esc(x.naam)}</button>`).join('')}</div>` : `<b>${esc(b.naam)}</b>`}
+      <div class="stepper">
+        <span class="lbl grow">Minuten</span>
+        <button type="button" class="stepbtn" aria-label="Minder" data-a="grMin" data-x="-">−</button>
+        <span class="stepnum" aria-live="polite">${s.grMin}</span>
+        <button type="button" class="stepbtn" aria-label="Meer" data-a="grMin" data-x="+">+</button>
+      </div>
+      <p class="muted" style="margin:0">${open ? esc(kid.naam) + ' heeft dit spelletje al openstaan; de minuten komen erbij.' : 'Kost geen ' + esc(valuta(kid).veel) + '. De tijd gaat lopen zodra ' + esc(kid.naam) + ' op "Speel nu" tikt.'}</p>
+      <div class="flex">
+        <button type="button" class="btn btn-soft" data-a="sluit">Annuleren</button>
+        <button type="button" class="btn wide btn-green" data-a="grBevestig">Aanzetten voor ${esc(kid.naam)}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function sheetOverig() {
   if (!s.sheet || s.sheet.type !== 'overig') return '';
   const o = overigInfo();
@@ -1899,19 +1974,21 @@ function renderKind() {
     </div>`;
   }).join('');
 
-  const beloningen = s.beloningen.map((b) => {
+  // Een spelletje dat klaarstaat komt bovenaan, zodat het kind het meteen ziet.
+  const beloningen = [...s.beloningen].sort((x, y) => (spelTimer(kind.id, y) ? 1 : 0) - (spelTimer(kind.id, x) ? 1 : 0)).map((b) => {
     const status = belStatus(kind.id, b);
     const info = STATUS_BEL[status];
     const spelT = spelTimer(kind.id, b);
-    const speelbaar = b.spel && (status === 'goed' || status === 'op') && (!b.duur || spelT);
+    const speelbaar = b.spel && (spelT || (!b.duur && (status === 'goed' || status === 'op')));
+    const minuten = spelT ? Math.round(spelT.totaal / 60) : b.duur;
     if (speelbaar) {
       return `<button type="button" class="rcard s-goed speel" data-a="spelen" data-id="${b.id}">
         <span class="rtop">
           <span class="ricon">${plaatje(b.icon, thema, 38, 1.5)}</span>
-          <span class="chip c-goed">${icon(IC.vink, 14, 3)}Goedgekeurd</span>
+          <span class="chip c-goed">${icon(IC.vink, 14, 3)}${spelT && spelT.gratis ? 'Cadeautje' : 'Goedgekeurd'}</span>
         </span>
         <span class="rnaam">${b.naam}</span>
-        ${b.duur ? `<span class="badges"><span class="duur">${icon(IC.klok, 18, 2)}${b.duur} minuten</span></span>` : ''}
+        ${minuten ? `<span class="badges"><span class="duur">${icon(IC.klok, 18, 2)}${minuten} minuten</span></span>` : ''}
         <span class="speel-knop">${icon(IC.speel, 30, 0)}${spelT && spelT.status !== 'wacht' ? 'Verder spelen' : 'Speel nu'}</span>
       </button>`;
     }
