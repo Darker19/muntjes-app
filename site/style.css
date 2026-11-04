@@ -295,7 +295,6 @@ body.echt .phone { background: var(--soft); }
 .tkaart { min-height: 180px; border-radius: 24px; padding: 18px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; text-align: left; border: 3px solid #FBE3A1; background: #fff; transition: background .2s, border-color .2s; }
 .sterrij { display: flex; flex-wrap: wrap; gap: 4px; }
 .ster-wacht svg path { stroke: var(--orange-bd); stroke-dasharray: 3 2; }
-.mcard.gekozen { border-color: var(--green-bd); background: var(--green-bg); }
 
 /* Thema's in de kind-app */
 .saldo { position: relative; overflow: hidden; }

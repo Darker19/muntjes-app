@@ -472,11 +472,9 @@ function samenvatting(array $data, string $kid): ?array {
             $laatste = ['label' => (string)($t['label'] ?? ''), 'bedrag' => $bedrag, 'status' => $status, 'ts' => (int)($t['ts'] ?? 0)];
         }
     }
-    // Taken waar het kind deze week op focust, met hoeveel sterren al binnen zijn.
+    // Voor de widget: eerst de taken op slot, dan waar al sterren op staan, dan de rest (de widget toont de eerste 3).
     $taken = array_column(taken_voor($data, $kid), null, 'id');
-    $f = $data['focus'][$kid] ?? null;
-    $focus = is_array($f) && (int)($f['week'] ?? 0) === $weekStart && is_array($f['ids'] ?? null) ? $f['ids'] : [];
-    $focus = array_values(array_unique(array_merge(is_array($kind['vast'] ?? null) ? $kind['vast'] : [], $focus)));
+    $focus = array_values(array_unique(array_merge(is_array($kind['vast'] ?? null) ? $kind['vast'] : [], array_keys($perTaak), array_keys($taken))));
     $gekozen = [];
     foreach ($focus as $id) {
         if (!isset($taken[$id])) continue;
