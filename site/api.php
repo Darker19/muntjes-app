@@ -22,6 +22,10 @@ date_default_timezone_set('Europe/Amsterdam');   // weken en dagen zoals in de a
 const DB_FILE      = __DIR__ . '/data/muntjes.sqlite';
 const MAX_FOUTEN   = 5;        // na zoveel foute pincodes...
 const LOCK_SECONDS = 900;      // ...15 minuten wachten
+const MAX_FOUTEN_TOTAAL = 15;  // zoveel foute pincodes van alle adressen samen binnen een uur...
+const TOTAAL_VENSTER    = 3600;
+const TOTAAL_SLOT       = 3600; // ...zet nieuwe logins een uur op slot (tablets en ingelogde ouders werken door)
+const MAX_PIN_WIJZIGEN  = 5;   // zo vaak per uur mag iemand proberen zijn pincode te wijzigen
 const SESSIE_DAGEN = 30;       // zo lang blijft een ouder ingelogd
 const MAX_BYTES    = 2000000;  // grootste toegestane opslag-verzoek
 
@@ -195,19 +199,62 @@ function need_volwassene(): array {
     return $w;
 }
 
-/* ---- pincode met slot na te veel fouten (per IP-adres) ---- */
-function slot_controleren(): void {
+/* ---- pincode met slot na te veel fouten: per adres, en voor alle adressen samen ---- */
+
+// Eén aansluiting met IPv6 heeft een heel blok adressen (/64); dat telt als één adres.
+function slot_ip(): string {
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '?');
+    if (!str_contains($ip, ':')) return $ip;
+    $bin = @inet_pton($ip);
+    return $bin === false ? $ip : bin2hex(substr($bin, 0, 8)) . '::/64';
+}
+function totaal_stand(): array {
+    $v = json_decode((string)instelling('pin_totaal'), true);
+    return is_array($v) ? $v + ['aantal' => 0, 'start' => 0, 'tot' => 0] : ['aantal' => 0, 'start' => 0, 'tot' => 0];
+}
+function minuten(int $tot): string {
+    $min = (int)ceil(($tot - time()) / 60);
+    return $min . ($min === 1 ? ' minuut' : ' minuten');
+}
+function slot_controleren(bool $ookTotaal = true): void {
     global $db;
     $st = $db->prepare('SELECT tot FROM fouten WHERE ip = ?');
-    $st->execute([$_SERVER['REMOTE_ADDR'] ?? '?']);
+    $st->execute([slot_ip()]);
     $tot = (int)$st->fetchColumn();
     if ($tot > time()) {
-        fail('Te vaak een verkeerde pincode. Probeer het over ' . (int)ceil(($tot - time()) / 60) . ' minuten opnieuw.', 429);
+        fail('Te vaak een verkeerde pincode. Probeer het over ' . minuten($tot) . ' opnieuw.', 429);
     }
+    $totaal = (int)totaal_stand()['tot'];
+    if ($ookTotaal && $totaal > time()) {
+        fail('Er is te vaak een verkeerde pincode geprobeerd. Inloggen kan over ' . minuten($totaal) . ' weer.', 429);
+    }
+}
+// Telt een fout mee voor alle adressen samen. Een geslaagde login zet deze teller niet terug.
+function totaal_fout(): void {
+    global $db;
+    $nu = time();
+    $db->exec('BEGIN IMMEDIATE');
+    $t = totaal_stand();
+    if ($nu - (int)$t['start'] >= TOTAAL_VENSTER) $t = ['aantal' => 0, 'start' => $nu, 'tot' => $t['tot']];
+    $t['aantal'] = (int)$t['aantal'] + 1;
+    $opSlot = $t['aantal'] >= MAX_FOUTEN_TOTAAL;
+    if ($opSlot) $t = ['aantal' => 0, 'start' => $nu, 'tot' => $nu + TOTAAL_SLOT];
+    zet_instelling('pin_totaal', json_encode($t));
+    $db->exec('COMMIT');
+    if (!$opSlot) return;
+    // Een poging om binnen te komen wil je weten: de ouders krijgen een melding.
+    error_log('muntjes: te veel foute pincodes, nieuwe logins op slot');
+    register_shutdown_function(function () use ($db) {
+        if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+        try {
+            $ouders = array_map('intval', $db->query("SELECT id FROM gebruikers WHERE rol = 'ouder'")->fetchAll(PDO::FETCH_COLUMN));
+            push_naar($ouders, ['titel' => 'Muntjes: veel foute pincodes', 'tekst' => 'Inloggen staat een uur op slot. Was jij dit niet? Wijzig dan je pincode.', 'tag' => 'pinslot']);
+        } catch (Throwable $e) { error_log('muntjes pinslot-push: ' . $e->getMessage()); }
+    });
 }
 function slot_fout(): void {
     global $db;
-    $ip = $_SERVER['REMOTE_ADDR'] ?? '?';
+    $ip = slot_ip();
     $st = $db->prepare('SELECT aantal, tot FROM fouten WHERE ip = ?');
     $st->execute([$ip]);
     $f = $st->fetch() ?: ['aantal' => 0, 'tot' => 0];
@@ -215,11 +262,26 @@ function slot_fout(): void {
     $tot = $aantal >= MAX_FOUTEN ? time() + LOCK_SECONDS : 0;
     $db->prepare('INSERT INTO fouten (ip, aantal, tot) VALUES (?, ?, ?)
                   ON CONFLICT(ip) DO UPDATE SET aantal = excluded.aantal, tot = excluded.tot')->execute([$ip, $aantal, $tot]);
+    totaal_fout();
     fail($tot ? 'Te vaak een verkeerde pincode. Probeer het over 15 minuten opnieuw.' : 'Verkeerde pincode.', $tot ? 429 : 403);
 }
 function slot_ok(): void {
     global $db;
-    $db->prepare('DELETE FROM fouten WHERE ip = ?')->execute([$_SERVER['REMOTE_ADDR'] ?? '?']);
+    $db->prepare('DELETE FROM fouten WHERE ip = ?')->execute([slot_ip()]);
+}
+// Pincodes zijn uniek, dus "al in gebruik" verraadt andermans pincode. Daarom een limiet per persoon,
+// die niet terugspringt als het wijzigen lukt.
+function wijzig_limiet(int $gebruiker): void {
+    global $db;
+    $sleutel = 'wijzig:' . $gebruiker;
+    $st = $db->prepare('SELECT aantal, tot FROM fouten WHERE ip = ?');
+    $st->execute([$sleutel]);
+    $f = $st->fetch() ?: ['aantal' => 0, 'tot' => 0];
+    $nu = time();
+    if ((int)$f['tot'] <= $nu) $f = ['aantal' => 0, 'tot' => $nu + 3600];
+    if ((int)$f['aantal'] >= MAX_PIN_WIJZIGEN) fail('Je hebt te vaak geprobeerd je pincode te wijzigen. Probeer het over ' . minuten((int)$f['tot']) . ' opnieuw.', 429);
+    $db->prepare('INSERT INTO fouten (ip, aantal, tot) VALUES (?, ?, ?)
+                  ON CONFLICT(ip) DO UPDATE SET aantal = excluded.aantal, tot = excluded.tot')->execute([$sleutel, (int)$f['aantal'] + 1, (int)$f['tot']]);
 }
 
 // Zoekt de gebruiker bij deze pincode (pincodes zijn uniek).
@@ -754,7 +816,8 @@ switch ($actie) {
     case 'pin': {
         need_post();
         $w = need_volwassene();
-        slot_controleren();
+        wijzig_limiet($w['id']);
+        slot_controleren(false);   // ook tijdens het totaalslot: dan wil je juist je pincode kunnen wijzigen
         $st = $db->prepare('SELECT pin_hash FROM gebruikers WHERE id = ?');
         $st->execute([$w['id']]);
         if (!password_verify((string)($in['oud'] ?? ''), (string)$st->fetchColumn())) slot_fout();
