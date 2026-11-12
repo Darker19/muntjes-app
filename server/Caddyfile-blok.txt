@@ -1,10 +1,20 @@
 # Muntjes-app (beloningen voor de kinderen). PHP draait in /srv/muntjes (container muntjes-php-1).
 # De database staat niet in deze map; /data en verborgen bestanden toch extra afgeschermd.
 muntjes.darkesttimes.nl {
+	import veilig
 	root * /srv/sites/muntjes
 	header X-Robots-Tag noindex
 	respond /data* 404
 	respond /.* 404
-	php_fastcgi muntjes-php-1:9000
+	@php path *.php
+	php_fastcgi @php muntjes-php-1:9000
 	file_server
+
+	# Kleiner versturen (app.js gaat van ~140 KB naar ~35 KB).
+	encode zstd gzip
+	# Bestanden mogen in de browser blijven, maar die vraagt elke keer even of er een nieuwe versie is
+	# (antwoord 304 als er niets veranderd is). Zo staat een nieuwe deploy meteen op de tablets.
+	# api.php regelt zijn eigen Cache-Control (no-store).
+	@muntjes_statisch not path *.php
+	header @muntjes_statisch Cache-Control "no-cache"
 }

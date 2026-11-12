@@ -46,7 +46,9 @@ session_set_cookie_params([
     'httponly' => true,
     'samesite' => 'Lax',
 ]);
-session_start();
+// Alleen een sessie als die er al is (cookie). Een nieuwe komt pas na een goede pincode (sessie_nodig).
+// Anders zou elk verzoek van een widget of tablet een leeg sessiebestand op de server achterlaten.
+if (isset($_COOKIE[session_name()])) session_start();
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -55,6 +57,9 @@ header('X-Content-Type-Options: nosniff');
 
 $transactie = false;
 
+function sessie_nodig(): void {
+    if (session_status() !== PHP_SESSION_ACTIVE) session_start();
+}
 function out(array $data, int $code = 200) {
     http_response_code($code);
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
@@ -701,6 +706,7 @@ switch ($actie) {
     case 'inloggen': {
         need_post();
         $g = gebruiker_met_pin((string)($in['pin'] ?? ''));
+        sessie_nodig();
         session_regenerate_id(true);
         $_SESSION['gebruiker'] = (int)$g['id'];
         out(['ok' => true]);
@@ -709,7 +715,10 @@ switch ($actie) {
     case 'uitloggen': {
         need_post();
         $_SESSION = [];
-        session_destroy();
+        if (session_status() === PHP_SESSION_ACTIVE) session_destroy();
+        // Ook de cookie weghalen, anders maakt het volgende verzoek meteen weer een lege sessie.
+        $c = session_get_cookie_params();
+        setcookie(session_name(), '', ['expires' => 1, 'path' => $c['path'], 'secure' => $c['secure'], 'httponly' => true, 'samesite' => 'Lax']);
         out(['ok' => true]);
     }
 
@@ -718,6 +727,7 @@ switch ($actie) {
         need_post();
         $g = gebruiker_met_pin((string)($in['pin'] ?? ''));
         if ($g['rol'] !== 'ouder') fail('Alleen papa of mama kan een tablet koppelen.', 403);
+        sessie_nodig();
         $_SESSION['koppel_tot'] = time() + 300;
         $s = lees_staat();
         $kids = $s ? (json_decode($s['data'], true)['kids'] ?? []) : [];
