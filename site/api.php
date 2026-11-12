@@ -26,6 +26,7 @@ const MAX_FOUTEN_TOTAAL = 15;  // zoveel foute pincodes van alle adressen samen 
 const TOTAAL_VENSTER    = 3600;
 const TOTAAL_SLOT       = 3600; // ...zet nieuwe logins een uur op slot (tablets en ingelogde ouders werken door)
 const MAX_PIN_WIJZIGEN  = 5;   // zo vaak per uur mag iemand proberen zijn pincode te wijzigen
+const BEKEND_DAGEN = 400;      // zo lang herkent de server een telefoon waarop goed is ingelogd (max. van Chrome)
 const SESSIE_DAGEN = 30;       // zo lang blijft een ouder ingelogd
 const MAX_BYTES    = 2000000;  // grootste toegestane opslag-verzoek
 
@@ -231,7 +232,7 @@ function slot_controleren(bool $ookTotaal = true): void {
     }
     $totaal = (int)totaal_stand()['tot'];
     if ($ookTotaal && $totaal > time()) {
-        fail('Er is te vaak een verkeerde pincode geprobeerd. Inloggen kan over ' . minuten($totaal) . ' weer.', 429);
+        fail('Er is te vaak een verkeerde pincode geprobeerd. Inloggen op een nieuw apparaat kan over ' . minuten($totaal) . ' weer.', 429);
     }
 }
 // Telt een fout mee voor alle adressen samen. Een geslaagde login zet deze teller niet terug.
@@ -253,7 +254,7 @@ function totaal_fout(): void {
         if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
         try {
             $ouders = array_map('intval', $db->query("SELECT id FROM gebruikers WHERE rol = 'ouder'")->fetchAll(PDO::FETCH_COLUMN));
-            push_naar($ouders, ['titel' => 'Muntjes: veel foute pincodes', 'tekst' => 'Inloggen staat een uur op slot. Was jij dit niet? Wijzig dan je pincode.', 'tag' => 'pinslot']);
+            push_naar($ouders, ['titel' => 'Muntjes: veel foute pincodes', 'tekst' => 'Inloggen op nieuwe apparaten staat een uur op slot (jullie eigen telefoons werken gewoon). Was jij dit niet? Wijzig dan je pincode.', 'tag' => 'pinslot']);
         } catch (Throwable $e) { error_log('muntjes pinslot-push: ' . $e->getMessage()); }
     });
 }
@@ -289,10 +290,43 @@ function wijzig_limiet(int $gebruiker): void {
                   ON CONFLICT(ip) DO UPDATE SET aantal = excluded.aantal, tot = excluded.tot')->execute([$sleutel, (int)$f['aantal'] + 1, (int)$f['tot']]);
 }
 
+// Bekend apparaat: een telefoon waarop al eens goed is ingelogd krijgt een ondertekende cookie.
+// Zo'n telefoon kan ook inloggen als het slot voor alle adressen samen dicht is; iemand van buiten
+// kan de familie dus niet buitensluiten. Het slot per adres geldt wel gewoon.
+// De handtekening hoort bij de huidige pincode: pincode wijzigen maakt oude cookies ongeldig.
+function bekend_handtekening(int $id, int $ts, string $pinHash): string {
+    $geheim = instelling('bekend_geheim');
+    if ($geheim === null) { $geheim = bin2hex(random_bytes(32)); zet_instelling('bekend_geheim', $geheim); }
+    return hash_hmac('sha256', "bekend:$id:$ts:$pinHash", $geheim);
+}
+function pin_hash_van(int $id): ?string {
+    global $db;
+    $st = $db->prepare('SELECT pin_hash FROM gebruikers WHERE id = ?');
+    $st->execute([$id]);
+    $h = $st->fetchColumn();
+    return $h === false ? null : (string)$h;
+}
+function bekend_apparaat(): bool {
+    if (!preg_match('/^(\d{1,9})\.(\d{1,12})\.([a-f0-9]{64})$/', (string)($_COOKIE['muntjes_bekend'] ?? ''), $m)) return false;
+    [, $id, $ts, $sig] = $m;
+    if ((int)$ts < time() - BEKEND_DAGEN * 86400) return false;
+    $h = pin_hash_van((int)$id);
+    return $h !== null && hash_equals(bekend_handtekening((int)$id, (int)$ts, $h), $sig);
+}
+function bekend_zetten(int $id): void {
+    $h = pin_hash_van($id);
+    if ($h === null || headers_sent()) return;
+    $ts = time();
+    $c = session_get_cookie_params();
+    setcookie('muntjes_bekend', "$id.$ts." . bekend_handtekening($id, $ts, $h), [
+        'expires' => $ts + BEKEND_DAGEN * 86400, 'path' => $c['path'], 'secure' => $c['secure'], 'httponly' => true, 'samesite' => 'Lax',
+    ]);
+}
+
 // Zoekt de gebruiker bij deze pincode (pincodes zijn uniek).
 function gebruiker_met_pin(string $pin): array {
     global $db;
-    slot_controleren();
+    slot_controleren(!bekend_apparaat());
     $alle = $db->query('SELECT id, naam, rol, pin_hash FROM gebruikers')->fetchAll();
     if (!$alle) fail('Er is nog geen gebruiker ingesteld op de server.', 503);
     if (preg_match('/^\d{4,8}$/', $pin)) {
@@ -711,6 +745,8 @@ if ($cli) return;   // timers.php gebruikt alleen de functies
 switch ($actie) {
     case 'status': {
         $w = wie();
+        // Wie al ingelogd is (van voor deze functie), wordt hier alsnog een bekend apparaat.
+        if ($w && $w['rol'] !== 'kind' && !bekend_apparaat()) bekend_zetten($w['id']);
         out(['rol' => $w['rol'] ?? null, 'kid' => $w['kid'] ?? null, 'naam' => $w['naam'] ?? null, 'id' => $w['id'] ?? null]);
     }
 
@@ -720,6 +756,7 @@ switch ($actie) {
         sessie_nodig();
         session_regenerate_id(true);
         $_SESSION['gebruiker'] = (int)$g['id'];
+        bekend_zetten((int)$g['id']);
         out(['ok' => true]);
     }
 
@@ -867,6 +904,7 @@ switch ($actie) {
         if (!preg_match('/^\d{4,8}$/', $nieuw)) fail('De nieuwe pincode moet uit 4 tot 8 cijfers bestaan.');
         if (pin_in_gebruik($nieuw, $w['id'])) fail('Deze pincode is al van iemand anders. Kies een andere.');
         $db->prepare('UPDATE gebruikers SET pin_hash = ? WHERE id = ?')->execute([password_hash($nieuw, PASSWORD_DEFAULT), $w['id']]);
+        bekend_zetten($w['id']);   // oude cookies (andere telefoons) zijn nu ongeldig, deze krijgt een nieuwe
         out(['ok' => true]);
     }
 
