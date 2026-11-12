@@ -317,6 +317,12 @@ function pin_in_gebruik(string $pin, int $behalve = 0): bool {
 }
 
 /* ---- gegevens ---- */
+// Staan berichtjes aan voor dit kind? (instelling per kind, alleen ouders kunnen die wijzigen)
+function berichten_aan(string $kid): bool {
+    $s = lees_staat();
+    foreach ($s ? json_decode($s['data'], true)['kids'] ?? [] : [] as $k) if (($k['id'] ?? '') === $kid) return !empty($k['berichten']);
+    return false;
+}
 function lees_staat(): ?array {
     global $db;
     $s = $db->query('SELECT versie, data FROM staat WHERE id = 1')->fetch();
@@ -971,6 +977,7 @@ switch ($actie) {
         $w = wie();
         if (!$w) fail('Niet ingelogd.', 401);
         if ($w['rol'] === 'familie') fail('Berichtjes zijn alleen voor papa en mama.', 403);
+        if ($w['rol'] === 'kind' && !berichten_aan($w['kid'])) fail('Berichtjes staan uit.', 403);
         $v = (int)(instelling('berichten_versie') ?? 0);
         if ($v === (int)($_GET['v'] ?? -1)) { http_response_code(204); exit; }
         if ($w['rol'] === 'kind') {
@@ -997,6 +1004,7 @@ switch ($actie) {
         $kids = $s ? array_column(json_decode($s['data'], true)['kids'] ?? [], null, 'id') : [];
         if ($w['rol'] === 'kind') {
             $kid = $w['kid'];
+            if (empty($kids[$kid]['berichten'])) fail('Berichtjes staan uit.', 403);
             $van = 'kind';
             $naam = (string)($kids[$kid]['naam'] ?? $kid);
             $st = $db->prepare("SELECT COUNT(*) FROM berichten WHERE kid = ? AND van = 'kind' AND ts > ?");
@@ -1005,6 +1013,7 @@ switch ($actie) {
         } else {
             $kid = (string)($in['kid'] ?? '');
             if (!isset($kids[$kid])) fail('Onbekend kind.');
+            if (empty($kids[$kid]['berichten'])) fail('Berichtjes staan uit voor ' . ($kids[$kid]['naam'] ?? 'dit kind') . '. Zet ze aan in Beheer.', 403);
             $van = 'ouder';
             $naam = $w['naam'];
         }

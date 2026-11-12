@@ -163,7 +163,7 @@ function beginState() {
   return {
     v: 2,
     kids: [
-      { id: 'noor', naam: 'Noor', kleur: '#7A4FD0', zacht: '#F1ECFB', thema: 'eenhoorn', vast: ['t2'] },
+      { id: 'noor', naam: 'Noor', kleur: '#7A4FD0', zacht: '#F1ECFB', thema: 'eenhoorn', vast: ['t2'], kladblok: true, berichten: true },
       { id: 'daan', naam: 'Daan', kleur: '#0F7C74', zacht: '#E4F3F1', thema: 'dino', groot: true }
     ],
     klusjes: [
@@ -852,14 +852,14 @@ const acties = {
 
   // Beheer: kinderen, klusjes en beloningen
   bewerk(d) {
-    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', groot: !!k.groot, stil: !!k.stil, vast: vastVan(k.id), zeker: false } }); }
+    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', groot: !!k.groot, stil: !!k.stil, kladblok: !!k.kladblok, berichten: !!k.berichten, vast: vastVan(k.id), zeker: false } }); }
     else if (d.x === 'klus') { const k = klusVan(d.id); zet({ edit: { soort: 'klus', id: k.id, naam: k.naam, icon: k.icon, waarde: k.waarde, keer: k.keer, per: k.per, perKind: editPerKind(k, 'klus'), zeker: false } }); }
     else if (d.x === 'taak') { const t = taakVan(d.id); zet({ edit: { soort: 'taak', id: t.id, naam: t.naam, icon: t.icon, doel: t.doel, beloning: t.beloning, perKind: editPerKind(t, 'taak'), zeker: false } }); }
     else { const b = belVan(d.id); zet({ edit: { soort: 'bel', id: b.id, naam: b.naam, icon: b.icon, kosten: b.kosten, duur: b.duur || 0, keer: b.keer, per: b.per, spel: b.spel || '', zeker: false } }); }
   },
   nieuw(d) {
     const vrij = KLEUREN.find(([c]) => !s.kids.some((k) => k.kleur === c)) || KLEUREN[0];
-    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false, stil: false, vast: [] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag', perKind: editPerKind({}, 'klus') } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1, perKind: editPerKind({}, 'taak') } : { naam: '', icon: 'star', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
+    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false, stil: false, kladblok: false, berichten: false, vast: [] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag', perKind: editPerKind({}, 'klus') } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1, perKind: editPerKind({}, 'taak') } : { naam: '', icon: 'star', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
     zet({ edit: { soort: d.x, id: null, ...basis, zeker: false } });
   },
   editVeld(d) {
@@ -871,6 +871,8 @@ const acties = {
     if (d.x === 'duur' || d.x === 'keer') v = Number(d.id);
     if (d.x === 'groot') v = !e.groot;
     if (d.x === 'stil') v = !e.stil;
+    if (d.x === 'kladblok') v = !e.kladblok;
+    if (d.x === 'berichten') v = !e.berichten;
     if (d.x === 'vast') v = e.vast.includes(d.id) ? e.vast.filter((x) => x !== d.id) : [...e.vast, d.id];
     zet({ edit: { ...e, [d.x]: v, zeker: false } });
   },
@@ -896,10 +898,10 @@ const acties = {
     const nieuwId = (p) => p + Date.now().toString(36);
     if (e.soort === 'kid') {
       const [kleur, zacht] = KLEUREN.find(([c]) => c === e.kleur) || KLEUREN[0];
-      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil, vast: e.vast } : k)), edit: null }));
+      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil, kladblok: e.kladblok, berichten: e.berichten, vast: e.vast } : k)), edit: null }));
       else {
         const id = nieuwId('kid');
-        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil, vast: e.vast }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
+        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil, kladblok: e.kladblok, berichten: e.berichten, vast: e.vast }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
       }
     } else if (e.soort === 'klus') {
       const item = { naam, icon: e.icon, waarde: e.waarde, keer: e.keer, per: e.per, perKind: perKindOpslaan(e) };
@@ -1237,13 +1239,13 @@ function pushBlok() {
 function renderOuder() {
   const titels = { melden: 'Klusje melden', aanvragen: 'Aanvragen', timers: 'Timers', berichten: 'Berichten', beheer: magBeheren() ? 'Beheer' : 'Account' };
   const schermen = { melden: schermMelden, aanvragen: schermAanvragen, timers: schermTimers, berichten: schermBerichten, beheer: schermBeheer };
-  if (s.scherm === 'berichten' && !magBerichten()) s = { ...s, scherm: 'melden' };
+  if (s.scherm === 'berichten' && (!magBerichten() || !berichtKids().length)) s = { ...s, scherm: 'melden' };
   const aantalAanvragen = s.tx.filter((t) => t.status === 'aangevraagd').length;
   const navs = [
     ['melden', 'Melden', IC.melden, 0],
     ['aanvragen', 'Aanvragen', IC.inbox, aantalAanvragen],
     ['timers', 'Timers', IC.klok, s.timers.length],
-    ...(magBerichten() ? [['berichten', 'Berichten', IC.bericht, s.kids.reduce((n, k) => n + ongelezen(k.id, 'kind'), 0)]] : []),
+    ...(magBerichten() && berichtKids().length ? [['berichten', 'Berichten', IC.bericht, berichtKids().reduce((n, k) => n + ongelezen(k.id, 'kind'), 0)]] : []),
     ['beheer', magBeheren() ? 'Beheer' : 'Account', magBeheren() ? IC.beheer : IC.persoon, 0]
   ];
   return `
@@ -1511,6 +1513,14 @@ function sheetBewerk() {
       <button type="button" class="lrij" data-a="editVeld" data-x="stil" aria-pressed="${!e.stil}">
         <span class="col"><span>Geluidjes op de tablet</span><small>Bij muntjes, sterren, confetti en tikken</small></span>
         <span class="switch${e.stil ? '' : ' on'}"><span></span></span>
+      </button>
+      <button type="button" class="lrij" data-a="editVeld" data-x="kladblok" aria-pressed="${!!e.kladblok}">
+        <span class="col"><span>Kladblok</span><small>Knop "Schrijven" op de tablet: vrij typen met het toetsenbord</small></span>
+        <span class="switch${e.kladblok ? ' on' : ''}"><span></span></span>
+      </button>
+      <button type="button" class="lrij" data-a="editVeld" data-x="berichten" aria-pressed="${!!e.berichten}">
+        <span class="col"><span>Berichtjes</span><small>Knop "Berichtjes" op de tablet: papa en mama schrijven en antwoord krijgen</small></span>
+        <span class="switch${e.berichten ? ' on' : ''}"><span></span></span>
       </button>
       ${(s.taken || []).length ? `<div class="lbl">Taken op slot</div>
       <p class="info" style="margin:-4px 0 8px">Staan bij ${esc(e.naam) || 'het kind'} bovenaan als taken voor de week. De andere taken zijn vrij te melden.</p>
@@ -2085,8 +2095,8 @@ function renderKind() {
       <span class="t-mascotte">${MASCOTTE[thema](64)}</span>
       <span class="hoi">Hoi ${kind.naam}!</span>
       ${takenVan(kind.id).length ? `<button type="button" class="taken-knop${takenScherm ? ' on' : ''}" data-a="kindScherm" data-id="${takenScherm ? 'beloningen' : 'taken'}">${takenScherm ? '← Beloningen' : ster(24) + ' Taken'}</button>` : ''}
-      <button type="button" class="taken-knop schrijf-knop" data-a="kladblok">${icon(IC.pen, 24, 2.2)} Schrijven</button>
-      <button type="button" class="taken-knop schrijf-knop" data-a="berichtjes">${icon(IC.bericht, 24, 2.2)} Berichtjes${ongelezen(kind.id, 'ouder') ? `<span class="kb-badge">${ongelezen(kind.id, 'ouder')}</span>` : ''}</button>
+      ${kind.kladblok ? `<button type="button" class="taken-knop schrijf-knop" data-a="kladblok">${icon(IC.pen, 24, 2.2)} Schrijven</button>` : ''}
+      ${kind.berichten ? `<button type="button" class="taken-knop schrijf-knop" data-a="berichtjes">${icon(IC.bericht, 24, 2.2)} Berichtjes${ongelezen(kind.id, 'ouder') ? `<span class="kb-badge">${ongelezen(kind.id, 'ouder')}</span>` : ''}</button>` : ''}
       <span class="grow"></span>
       <span class="wk-lbl">Deze week verdiend</span>
       <span class="wk" role="img" aria-label="${st.week} van ${s.maxWeek}">${vakjes}</span>
@@ -2252,8 +2262,9 @@ let berichtHaalt = false;
 let berichtVerstuurt = false;
 let gelezenBezig = false;
 const magBerichten = () => DEMO || rol === 'ouder';
+const berichtKids = () => s.kids.filter((k) => k.berichten);
 const ongelezen = (kid, van) => berichten.filter((b) => b.kid === kid && b.van === van && !b.gelezen).length;
-const berichtKidNu = () => (kidVan(s.berichtKid) ? s.berichtKid : s.kids[0] && s.kids[0].id);
+const berichtKidNu = () => { const ks = berichtKids(); return ks.some((k) => k.id === s.berichtKid) ? s.berichtKid : ks[0] && ks[0].id; };
 
 function demoBerichten() {
   try {
@@ -2273,6 +2284,7 @@ function demoBewaar() {
 async function berichtenHaal(opnieuw) {
   if (DEMO) { berichten = demoBerichten(); return; }
   if (!rol || rol === 'familie' || berichtHaalt) return;
+  if (rol === 'kind' && !(kidVan(s.tabletKid) || {}).berichten) return;
   berichtHaalt = true;
   const r = await api('berichten', undefined, '&v=' + (opnieuw ? -1 : berichtV));
   berichtHaalt = false;
@@ -2327,12 +2339,12 @@ function berichtBubbels(kid, mijnKant) {
 }
 
 function schermBerichten() {
-  if (!s.kids.length) return '<div class="empty">Voeg eerst een kind toe.</div>';
+  if (!berichtKids().length) return '<div class="empty">Berichtjes staan voor geen enkel kind aan. Zet ze per kind aan in Beheer, bij het kind.</div>';
   const kid = berichtKidNu();
   const kind = kidVan(kid);
   const lijst = berichtBubbels(kid, 'ouder');
   return `
-    ${s.kids.length > 1 ? `<div class="bo-kids">${s.kids.map((k) => {
+    ${berichtKids().length > 1 ? `<div class="bo-kids">${berichtKids().map((k) => {
       const n = ongelezen(k.id, 'kind');
       return `<button type="button" class="seg-btn${k.id === kid ? ' on' : ''}" aria-pressed="${k.id === kid}" data-a="berichtKid" data-id="${k.id}">${esc(k.naam)}${n ? `<span class="kb-badge">${n}</span>` : ''}</button>`;
     }).join('')}</div>` : ''}
@@ -2700,7 +2712,7 @@ function render() {
   $('#col-kind').hidden = weergave === 'ouder';
   $('#ouder').innerHTML = weergave === 'kind' ? '' : !DEMO && !volwassene() ? renderWelkom() : renderOuder();
   $('#kind').innerHTML = weergave === 'ouder' ? '' : renderKind();
-  if (kb && (weergave === 'ouder' || kb.kid !== s.tabletKid)) kladblokDicht();
+  if (kb && (weergave === 'ouder' || kb.kid !== s.tabletKid || !(kidVan(kb.kid) || {})[kb.modus === 'bericht' ? 'berichten' : 'kladblok'])) kladblokDicht();
   berichtenNaRender();
   // Even wachten: een ster en de voltooide taak komen vlak na elkaar binnen.
   if (weergave !== 'ouder' && (DEMO || rol === 'kind')) { clearTimeout(zoekTimer); zoekTimer = setTimeout(() => { zoekFeest(); saldoCheck(); }, 60); }
