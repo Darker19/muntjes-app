@@ -121,6 +121,16 @@ try {
         aangemaakt INTEGER NOT NULL,
         laatst INTEGER NOT NULL DEFAULT 0
     )');
+    // Berichtjes tussen een kind (tablet) en papa en mama. Blijven in de app: geen pushmeldingen of mail.
+    $db->exec('CREATE TABLE IF NOT EXISTS berichten (
+        id INTEGER PRIMARY KEY,
+        kid TEXT NOT NULL,
+        van TEXT NOT NULL CHECK (van IN (\'kind\', \'ouder\')),
+        naam TEXT NOT NULL,
+        tekst TEXT NOT NULL,
+        ts INTEGER NOT NULL,
+        gelezen INTEGER NOT NULL DEFAULT 0
+    )');
 } catch (Throwable $e) {
     fail('De database werkt niet op deze server. Controleer of PHP de map data/ mag beschrijven en of SQLite aan staat.', 500);
 }
@@ -953,6 +963,71 @@ switch ($actie) {
             out(['status' => $status, 'rest' => (int)ceil($rest), 'naam' => (string)($t['naam'] ?? '')]);
         }
         out(['status' => 'weg', 'rest' => 0]);   // gestopt of afgerond
+    }
+
+    // Berichtjes: een kind schrijft papa en mama, en zij schrijven terug. Familie doet niet mee.
+    case 'berichten': {
+        $w = wie();
+        if (!$w) fail('Niet ingelogd.', 401);
+        if ($w['rol'] === 'familie') fail('Berichtjes zijn alleen voor papa en mama.', 403);
+        $v = (int)(instelling('berichten_versie') ?? 0);
+        if ($v === (int)($_GET['v'] ?? -1)) { http_response_code(204); exit; }
+        if ($w['rol'] === 'kind') {
+            $st = $db->prepare('SELECT * FROM (SELECT id, kid, van, naam, tekst, ts, gelezen FROM berichten WHERE kid = ? ORDER BY id DESC LIMIT 200) ORDER BY id');
+            $st->execute([$w['kid']]);
+        } else {
+            $st = $db->query('SELECT * FROM (SELECT id, kid, van, naam, tekst, ts, gelezen FROM berichten ORDER BY id DESC LIMIT 400) ORDER BY id');
+        }
+        out(['v' => $v, 'berichten' => array_map(fn($r) => [
+            'id' => (int)$r['id'], 'kid' => $r['kid'], 'van' => $r['van'], 'naam' => $r['naam'],
+            'tekst' => $r['tekst'], 'ts' => (int)$r['ts'] * 1000, 'gelezen' => (bool)$r['gelezen'],
+        ], $st->fetchAll())]);
+    }
+
+    case 'bericht': {
+        need_post();
+        $w = wie();
+        if (!$w) fail('Niet ingelogd.', 401);
+        if ($w['rol'] === 'familie') fail('Berichtjes zijn alleen voor papa en mama.', 403);
+        $tekst = trim(preg_replace('/[\x00-\x09\x0B-\x1F\x7F]/u', '', (string)($in['tekst'] ?? '')) ?? '');
+        if ($tekst === '') fail('Typ eerst een berichtje.');
+        if (mb_strlen($tekst) > 500) fail('Dat berichtje is te lang.');
+        $s = lees_staat();
+        $kids = $s ? array_column(json_decode($s['data'], true)['kids'] ?? [], null, 'id') : [];
+        if ($w['rol'] === 'kind') {
+            $kid = $w['kid'];
+            $van = 'kind';
+            $naam = (string)($kids[$kid]['naam'] ?? $kid);
+            $st = $db->prepare("SELECT COUNT(*) FROM berichten WHERE kid = ? AND van = 'kind' AND ts > ?");
+            $st->execute([$kid, time() - 600]);
+            if ((int)$st->fetchColumn() >= 30) fail('Je hebt al heel veel berichtjes gestuurd. Wacht even.', 429);
+        } else {
+            $kid = (string)($in['kid'] ?? '');
+            if (!isset($kids[$kid])) fail('Onbekend kind.');
+            $van = 'ouder';
+            $naam = $w['naam'];
+        }
+        $db->exec('BEGIN IMMEDIATE');
+        $transactie = true;
+        $db->prepare('INSERT INTO berichten (kid, van, naam, tekst, ts) VALUES (?, ?, ?, ?, ?)')->execute([$kid, $van, $naam, $tekst, time()]);
+        $id = (int)$db->lastInsertId();
+        $db->prepare('DELETE FROM berichten WHERE ts < ?')->execute([time() - 90 * 86400]);
+        zet_instelling('berichten_versie', (string)((int)(instelling('berichten_versie') ?? 0) + 1));
+        $db->exec('COMMIT');
+        $transactie = false;
+        out(['id' => $id]);
+    }
+
+    case 'bericht_gelezen': {
+        need_post();
+        $w = wie();
+        if (!$w) fail('Niet ingelogd.', 401);
+        if ($w['rol'] === 'familie') fail('Berichtjes zijn alleen voor papa en mama.', 403);
+        [$kid, $van] = $w['rol'] === 'kind' ? [$w['kid'], 'ouder'] : [(string)($in['kid'] ?? ''), 'kind'];
+        $st = $db->prepare('UPDATE berichten SET gelezen = 1 WHERE kid = ? AND van = ? AND gelezen = 0');
+        $st->execute([$kid, $van]);
+        if ($st->rowCount()) zet_instelling('berichten_versie', (string)((int)(instelling('berichten_versie') ?? 0) + 1));
+        out(['ok' => true]);
     }
 
     // Meldingen op deze telefoon (Web Push)
