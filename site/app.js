@@ -1134,7 +1134,8 @@ const acties = {
     const fout = await berichtStuur(kid, tekst, false);
     berichtVerstuurt = false;
     if (fout) { melding(fout); return; }
-    zet({ berichtTekst: '' });
+    // Alleen leegmaken als er tijdens het versturen niets bij getypt is.
+    if ((s.berichtTekst || '').trim() === tekst) zet({ berichtTekst: '' });
   },
   // Kind meldt dat het een taak gedaan heeft; papa of mama geeft de ster.
   taakMeld(d) {
@@ -2145,7 +2146,7 @@ let kb = null;
 function kladblokLaad(kidId) {
   try {
     const d = JSON.parse(localStorage.getItem(KLADBLOK + kidId) || 'null');
-    if (d && Array.isArray(d.blaadjes) && d.blaadjes.length) return { blaadjes: d.blaadjes.map(String).slice(0, MAX_BLAADJES), nu: Math.min(d.nu | 0, d.blaadjes.length - 1) };
+    if (d && Array.isArray(d.blaadjes) && d.blaadjes.length) return { blaadjes: d.blaadjes.map(String).slice(0, MAX_BLAADJES), nu: Math.max(0, Math.min(d.nu | 0, d.blaadjes.length - 1)) };
   } catch (e) { /* negeren */ }
   return { blaadjes: [''], nu: 0 };
 }
@@ -2259,6 +2260,7 @@ const BERICHT_DEMO = 'muntjes-berichten-demo';
 let berichten = [];
 let berichtV = -1;
 let berichtHaalt = false;
+let berichtNogEens = false;
 let berichtVerstuurt = false;
 let gelezenBezig = false;
 const magBerichten = () => DEMO || rol === 'ouder';
@@ -2283,11 +2285,14 @@ function demoBewaar() {
 
 async function berichtenHaal(opnieuw) {
   if (DEMO) { berichten = demoBerichten(); return; }
-  if (!rol || rol === 'familie' || berichtHaalt) return;
+  if (!rol || rol === 'familie') return;
   if (rol === 'kind' && !(kidVan(s.tabletKid) || {}).berichten) return;
+  // Loopt er al een ophaalronde? Dan daarna nog een keer, zodat een net verstuurd berichtje meteen verschijnt.
+  if (berichtHaalt) { if (opnieuw) berichtNogEens = true; return; }
   berichtHaalt = true;
   const r = await api('berichten', undefined, '&v=' + (opnieuw ? -1 : berichtV));
   berichtHaalt = false;
+  if (berichtNogEens) { berichtNogEens = false; return berichtenHaal(true); }
   if (r.status !== 200) return;
   const eerder = berichtV !== -1 ? new Set(berichten.map((b) => b.id)) : null;
   berichtV = r.data.v;
@@ -2764,7 +2769,7 @@ document.addEventListener('keydown', (e) => {
     else if (e.key === 'Enter') acties.pinOk();
     return;
   }
-  if (e.key === 'Enter' && e.target.id === 'bo-tekst') { acties.berichtStuur(); return; }
+  if (e.key === 'Enter' && e.target.id === 'bo-tekst' && !e.isComposing) { acties.berichtStuur(); return; }
   if (e.key !== 'Escape') return;
   if (kb) { kladblokDicht(); return; }
   if (s.edit) acties.editSluit();

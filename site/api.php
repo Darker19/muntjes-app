@@ -1112,6 +1112,7 @@ switch ($actie) {
         $w = wie();
         if (!$w) fail('Niet ingelogd.', 401);
         if ($w['rol'] === 'familie') fail('Berichtjes zijn alleen voor papa en mama.', 403);
+        if ($w['rol'] === 'kind' && !berichten_aan($w['kid'])) fail('Berichtjes staan uit.', 403);
         [$kid, $van] = $w['rol'] === 'kind' ? [$w['kid'], 'ouder'] : [(string)($in['kid'] ?? ''), 'kind'];
         $st = $db->prepare('UPDATE berichten SET gelezen = 1 WHERE kid = ? AND van = ? AND gelezen = 0');
         $st->execute([$kid, $van]);
