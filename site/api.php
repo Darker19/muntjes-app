@@ -477,9 +477,11 @@ function familie_fout(array $oud, array $nieuw, string $naam): ?string {
         if (($t['status'] ?? '') !== 'aangevraagd' || !in_array($n[$id]['status'] ?? '', ['goed', 'afgewezen'], true)
             || !gelijk($a, $b) || ($n[$id]['beslistDoor'] ?? '') !== $naam) return $nee;
     }
+    $kidIds = array_column(is_array($oud['kids'] ?? null) ? $oud['kids'] : [], 'id');
     foreach ($n as $id => $t) {
         if (isset($o[$id])) continue;
         if (($t['bron'] ?? '') !== 'ouder' || ($t['status'] ?? '') !== 'goed' || ($t['door'] ?? '') !== $naam) return $nee;
+        if (!in_array($t['kid'] ?? null, $kidIds, true)) return 'Dit kind bestaat niet (meer).';
         $bedrag = $t['amount'] ?? null;
         $ref = (string)($t['ref'] ?? '');
         // Klusjes en taken met de waarden van dit kind.
@@ -497,6 +499,31 @@ function familie_fout(array $oud, array $nieuw, string $naam): ?string {
             return $nee;
         }
         if (!is_string($t['label'] ?? null) || mb_strlen($t['label']) > 60 || mb_strlen((string)($t['msg'] ?? '')) > 200) return $nee;
+    }
+    return null;
+}
+
+// Vorm van kinderen en kaarten bij het opslaan door een ouder. De app laat alleen nette waarden toe;
+// dit is de controle op de server, zodat er nooit HTML of een vreemd adres in de gegevens komt.
+function kaarten_fout(array $data): ?string {
+    $id = fn($v): bool => is_string($v) && preg_match('/^[A-Za-z0-9_-]{1,40}$/', $v) === 1;
+    $naam = fn($v): bool => is_string($v) && $v !== '' && mb_strlen($v) <= 60 && !preg_match('/[<>&"]/', $v);
+    $kleur = fn($v): bool => is_string($v) && preg_match('/^#[0-9A-Fa-f]{3,8}$/', $v) === 1;
+    foreach (is_array($data['kids'] ?? null) ? $data['kids'] : [] as $k) {
+        if (!is_array($k) || !$id($k['id'] ?? null)) return 'Een kind heeft een ongeldige code.';
+        if (!$naam($k['naam'] ?? null)) return 'De naam van een kind mag geen < > & of " bevatten.';
+        if (!$kleur($k['kleur'] ?? null) || !$kleur($k['zacht'] ?? null)) return 'Een kind heeft een ongeldige kleur.';
+    }
+    foreach (['klusjes' => 'klusje', 'taken' => 'taak', 'beloningen' => 'beloning'] as $lijst => $wat) {
+        foreach (is_array($data[$lijst] ?? null) ? $data[$lijst] : [] as $x) {
+            if (!is_array($x) || !$id($x['id'] ?? null)) return 'Een ' . $wat . ' heeft een ongeldige code.';
+            if (!$naam($x['naam'] ?? null)) return 'De naam van een ' . $wat . ' mag geen < > & of " bevatten.';
+            if (isset($x['icon']) && (!is_string($x['icon']) || !preg_match('/^[a-z0-9-]{0,30}$/', $x['icon']))) return 'Een ' . $wat . ' heeft een ongeldig plaatje.';
+        }
+    }
+    foreach (is_array($data['beloningen'] ?? null) ? $data['beloningen'] : [] as $b) {
+        $spel = $b['spel'] ?? '';
+        if ($spel !== '' && (!is_string($spel) || !preg_match('#^https://[a-z0-9.-]+(/[^\s"<>]*)?$#i', $spel))) return 'Een spelletje heeft een ongeldig adres.';
     }
     return null;
 }
@@ -795,6 +822,10 @@ switch ($actie) {
         } elseif ($w['rol'] === 'familie') {
             if (!$s) fail('Dit mag alleen papa of mama aanpassen.', 403);
             $fout = familie_fout(json_decode($s['data'], true), $in['data'], $w['naam']);
+            if ($fout) fail($fout, 403);
+        } else {
+            // 403: de app gooit de wijziging dan weg en haalt de gegevens opnieuw op.
+            $fout = kaarten_fout($in['data']);
             if ($fout) fail($fout, 403);
         }
         $db->prepare('INSERT INTO staat (id, versie, data, bijgewerkt) VALUES (1, ?, ?, ?)
