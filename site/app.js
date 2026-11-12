@@ -49,6 +49,9 @@ const IC = {
   beheer: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
   vink: 'M5 12.5l4.5 4.5L19 7.5',
   kruis: 'M6 6l12 12M18 6L6 18',
+  pen: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4',
+  bericht: 'M4 5h16v11H9l-5 4z',
+  stuur: 'M4 12l16-8-6 16-2.5-6.5z',
   speel: 'M8 5.5v13a.8.8 0 0 0 1.2.7l10.4-6.5a.8.8 0 0 0 0-1.4L9.2 4.8A.8.8 0 0 0 8 5.5z'
 };
 
@@ -160,7 +163,7 @@ function beginState() {
   return {
     v: 2,
     kids: [
-      { id: 'noor', naam: 'Noor', kleur: '#7A4FD0', zacht: '#F1ECFB', thema: 'eenhoorn', vast: ['t2'] },
+      { id: 'noor', naam: 'Noor', kleur: '#7A4FD0', zacht: '#F1ECFB', thema: 'eenhoorn', vast: ['t2'], kladblok: true, berichten: true },
       { id: 'daan', naam: 'Daan', kleur: '#0F7C74', zacht: '#E4F3F1', thema: 'dino', groot: true }
     ],
     klusjes: [
@@ -346,6 +349,7 @@ async function synchroniseer() {
       if (r.ok) {
         versie = r.data.versie;
         onbevestigd.splice(0, n);
+        meldingenOpruimen();
       } else if (r.status === 409) {
         s = { ...s, ...(r.data.data || startData()) };
         versie = r.data.versie;
@@ -377,9 +381,24 @@ async function haal(alles) {
   if (r.data.data) s = { ...s, ...r.data.data };
   if (rol === 'kind' && !kidVan(s.tabletKid)) { zetToken(''); afgemeld(); return; }
   render();
+  meldingenOpruimen();
+}
+
+// Meldingen van aanvragen die niet meer openstaan van deze telefoon halen
+// (bijv. net goedgekeurd, hier of door de andere ouder).
+async function meldingenOpruimen() {
+  if (DEMO || !volwassene() || !versie || !('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg || !reg.getNotifications) return;
+    const open = new Set(s.tx.filter((t) => t.status === 'aangevraagd').map((t) => 'aanvraag-' + t.id));
+    (await reg.getNotifications()).forEach((n) => { if (n.tag.startsWith('aanvraag-') && !open.has(n.tag)) n.close(); });
+  } catch (e) { /* negeren */ }
 }
 
 function afgemeld() {
+  berichten = [];
+  berichtV = -1;
   rol = null;
   ik = null;
   versie = 0;
@@ -407,6 +426,8 @@ async function start() {
   s = { ...s, login: null, tabletKid: rol === 'kind' ? r.data.kid : null, scherm: rol === 'familie' && s.scherm === 'beheer' ? 'melden' : s.scherm };
   await haal(true);
   if (!rol) return;
+  berichtV = -1;
+  berichtenHaal(true);
   if (rol === 'ouder' && versie === 0) {
     // Allereerste keer: standaardklusjes en -beloningen op de server zetten.
     s = { ...s, ...startData() };
@@ -831,14 +852,14 @@ const acties = {
 
   // Beheer: kinderen, klusjes en beloningen
   bewerk(d) {
-    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', groot: !!k.groot, stil: !!k.stil, vast: vastVan(k.id), zeker: false } }); }
+    if (d.x === 'kid') { const k = kidVan(d.id); zet({ edit: { soort: 'kid', id: k.id, naam: k.naam, kleur: k.kleur, thema: k.thema || 'geen', groot: !!k.groot, stil: !!k.stil, kladblok: !!k.kladblok, berichten: !!k.berichten, vast: vastVan(k.id), zeker: false } }); }
     else if (d.x === 'klus') { const k = klusVan(d.id); zet({ edit: { soort: 'klus', id: k.id, naam: k.naam, icon: k.icon, waarde: k.waarde, keer: k.keer, per: k.per, perKind: editPerKind(k, 'klus'), zeker: false } }); }
     else if (d.x === 'taak') { const t = taakVan(d.id); zet({ edit: { soort: 'taak', id: t.id, naam: t.naam, icon: t.icon, doel: t.doel, beloning: t.beloning, perKind: editPerKind(t, 'taak'), zeker: false } }); }
     else { const b = belVan(d.id); zet({ edit: { soort: 'bel', id: b.id, naam: b.naam, icon: b.icon, kosten: b.kosten, duur: b.duur || 0, keer: b.keer, per: b.per, spel: b.spel || '', zeker: false } }); }
   },
   nieuw(d) {
     const vrij = KLEUREN.find(([c]) => !s.kids.some((k) => k.kleur === c)) || KLEUREN[0];
-    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false, stil: false, vast: [] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag', perKind: editPerKind({}, 'klus') } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1, perKind: editPerKind({}, 'taak') } : { naam: '', icon: 'star', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
+    const basis = d.x === 'kid' ? { naam: '', kleur: vrij[0], thema: 'geen', groot: false, stil: false, kladblok: false, berichten: false, vast: [] } : d.x === 'klus' ? { naam: '', icon: 'star', waarde: 1, keer: 1, per: 'dag', perKind: editPerKind({}, 'klus') } : d.x === 'taak' ? { naam: '', icon: 'star', doel: 5, beloning: 1, perKind: editPerKind({}, 'taak') } : { naam: '', icon: 'star', kosten: 1, duur: 0, keer: 1, per: 'week', spel: '' };
     zet({ edit: { soort: d.x, id: null, ...basis, zeker: false } });
   },
   editVeld(d) {
@@ -850,6 +871,8 @@ const acties = {
     if (d.x === 'duur' || d.x === 'keer') v = Number(d.id);
     if (d.x === 'groot') v = !e.groot;
     if (d.x === 'stil') v = !e.stil;
+    if (d.x === 'kladblok') v = !e.kladblok;
+    if (d.x === 'berichten') v = !e.berichten;
     if (d.x === 'vast') v = e.vast.includes(d.id) ? e.vast.filter((x) => x !== d.id) : [...e.vast, d.id];
     zet({ edit: { ...e, [d.x]: v, zeker: false } });
   },
@@ -875,10 +898,10 @@ const acties = {
     const nieuwId = (p) => p + Date.now().toString(36);
     if (e.soort === 'kid') {
       const [kleur, zacht] = KLEUREN.find(([c]) => c === e.kleur) || KLEUREN[0];
-      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil, vast: e.vast } : k)), edit: null }));
+      if (e.id) zet((st) => ({ kids: st.kids.map((k) => (k.id === e.id ? { ...k, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil, kladblok: e.kladblok, berichten: e.berichten, vast: e.vast } : k)), edit: null }));
       else {
         const id = nieuwId('kid');
-        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil, vast: e.vast }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
+        zet((st) => ({ kids: [...st.kids, { id, naam, kleur, zacht, thema: e.thema, groot: e.groot, stil: e.stil, kladblok: e.kladblok, berichten: e.berichten, vast: e.vast }], kindMelden: { ...st.kindMelden, [id]: true }, edit: null }));
       }
     } else if (e.soort === 'klus') {
       const item = { naam, icon: e.icon, waarde: e.waarde, keer: e.keer, per: e.per, perKind: perKindOpslaan(e) };
@@ -1100,6 +1123,20 @@ const acties = {
   groot() { zet((st) => ({ kids: st.kids.map((k) => (k.id === st.tabletKid ? { ...k, groot: !k.groot } : k)) })); },
   feestWeg() { volgendFeest(); },
   kindScherm(d) { zet({ kindScherm: d.id }); },
+  kladblok() { kladblokOpen(); },
+  berichtjes() { berichtjesOpen(); },
+  berichtKid(d) { zet({ berichtKid: d.id }); },
+  async berichtStuur() {
+    const kid = berichtKidNu();
+    const tekst = (s.berichtTekst || '').trim();
+    if (!kid || !tekst || berichtVerstuurt) return;
+    berichtVerstuurt = true;
+    const fout = await berichtStuur(kid, tekst, false);
+    berichtVerstuurt = false;
+    if (fout) { melding(fout); return; }
+    // Alleen leegmaken als er tijdens het versturen niets bij getypt is.
+    if ((s.berichtTekst || '').trim() === tekst) zet({ berichtTekst: '' });
+  },
   // Kind meldt dat het een taak gedaan heeft; papa of mama geeft de ster.
   taakMeld(d) {
     const kid = s.tabletKid;
@@ -1201,13 +1238,15 @@ function pushBlok() {
 
 // ---------- ouder-app ----------
 function renderOuder() {
-  const titels = { melden: 'Klusje melden', aanvragen: 'Aanvragen', timers: 'Timers', beheer: magBeheren() ? 'Beheer' : 'Account' };
-  const schermen = { melden: schermMelden, aanvragen: schermAanvragen, timers: schermTimers, beheer: schermBeheer };
+  const titels = { melden: 'Klusje melden', aanvragen: 'Aanvragen', timers: 'Timers', berichten: 'Berichten', beheer: magBeheren() ? 'Beheer' : 'Account' };
+  const schermen = { melden: schermMelden, aanvragen: schermAanvragen, timers: schermTimers, berichten: schermBerichten, beheer: schermBeheer };
+  if (s.scherm === 'berichten' && (!magBerichten() || !berichtKids().length)) s = { ...s, scherm: 'melden' };
   const aantalAanvragen = s.tx.filter((t) => t.status === 'aangevraagd').length;
   const navs = [
     ['melden', 'Melden', IC.melden, 0],
     ['aanvragen', 'Aanvragen', IC.inbox, aantalAanvragen],
     ['timers', 'Timers', IC.klok, s.timers.length],
+    ...(magBerichten() && berichtKids().length ? [['berichten', 'Berichten', IC.bericht, berichtKids().reduce((n, k) => n + ongelezen(k.id, 'kind'), 0)]] : []),
     ['beheer', magBeheren() ? 'Beheer' : 'Account', magBeheren() ? IC.beheer : IC.persoon, 0]
   ];
   return `
@@ -1475,6 +1514,14 @@ function sheetBewerk() {
       <button type="button" class="lrij" data-a="editVeld" data-x="stil" aria-pressed="${!e.stil}">
         <span class="col"><span>Geluidjes op de tablet</span><small>Bij muntjes, sterren, confetti en tikken</small></span>
         <span class="switch${e.stil ? '' : ' on'}"><span></span></span>
+      </button>
+      <button type="button" class="lrij" data-a="editVeld" data-x="kladblok" aria-pressed="${!!e.kladblok}">
+        <span class="col"><span>Kladblok</span><small>Knop "Schrijven" op de tablet: vrij typen met het toetsenbord</small></span>
+        <span class="switch${e.kladblok ? ' on' : ''}"><span></span></span>
+      </button>
+      <button type="button" class="lrij" data-a="editVeld" data-x="berichten" aria-pressed="${!!e.berichten}">
+        <span class="col"><span>Berichtjes</span><small>Knop "Berichtjes" op de tablet: papa en mama schrijven en antwoord krijgen</small></span>
+        <span class="switch${e.berichten ? ' on' : ''}"><span></span></span>
       </button>
       ${(s.taken || []).length ? `<div class="lbl">Taken op slot</div>
       <p class="info" style="margin:-4px 0 8px">Staan bij ${esc(e.naam) || 'het kind'} bovenaan als taken voor de week. De andere taken zijn vrij te melden.</p>
@@ -2049,6 +2096,8 @@ function renderKind() {
       <span class="t-mascotte">${MASCOTTE[thema](64)}</span>
       <span class="hoi">Hoi ${esc(kind.naam)}!</span>
       ${takenVan(kind.id).length ? `<button type="button" class="taken-knop${takenScherm ? ' on' : ''}" data-a="kindScherm" data-id="${takenScherm ? 'beloningen' : 'taken'}">${takenScherm ? '← Beloningen' : ster(24) + ' Taken'}</button>` : ''}
+      ${kind.kladblok ? `<button type="button" class="taken-knop schrijf-knop" data-a="kladblok">${icon(IC.pen, 24, 2.2)} Schrijven</button>` : ''}
+      ${kind.berichten ? `<button type="button" class="taken-knop schrijf-knop" data-a="berichtjes">${icon(IC.bericht, 24, 2.2)} Berichtjes${ongelezen(kind.id, 'ouder') ? `<span class="kb-badge">${ongelezen(kind.id, 'ouder')}</span>` : ''}</button>` : ''}
       <span class="grow"></span>
       <span class="wk-lbl">Deze week verdiend</span>
       <span class="wk" role="img" aria-label="${st.week} van ${s.maxWeek}">${vakjes}</span>
@@ -2085,6 +2134,302 @@ function renderKind() {
       </div>
     </div>
     ${s.toast && weergave === 'kind' ? `<div class="toast kind-toast" role="status"><span>${esc(s.toast)}</span></div>` : ''}`;
+}
+
+// ---------- kladblok: vrij typen om te oefenen met het toetsenbord van de tablet ----------
+// Staat los van render(), zodat het tekstvak niet opnieuw getekend wordt terwijl het kind typt.
+// De blaadjes blijven alleen op deze tablet bewaard (per kind).
+const KLADBLOK = 'muntjes-kladblok-';
+const MAX_BLAADJES = 10;
+let kb = null;
+
+function kladblokLaad(kidId) {
+  try {
+    const d = JSON.parse(localStorage.getItem(KLADBLOK + kidId) || 'null');
+    if (d && Array.isArray(d.blaadjes) && d.blaadjes.length) return { blaadjes: d.blaadjes.map(String).slice(0, MAX_BLAADJES), nu: Math.max(0, Math.min(d.nu | 0, d.blaadjes.length - 1)) };
+  } catch (e) { /* negeren */ }
+  return { blaadjes: [''], nu: 0 };
+}
+
+function kladblokBewaar() {
+  if (!kb || kb.modus !== 'schrijf') return;
+  try { localStorage.setItem(KLADBLOK + kb.kid, JSON.stringify({ blaadjes: kb.blaadjes, nu: kb.nu })); } catch (e) { /* negeren */ }
+}
+
+function kladblokVenster() {
+  if ($('#kladblok')) return;
+  const el = document.createElement('div');
+  el.id = 'kladblok';
+  $('#kind').parentNode.appendChild(el);
+  el.addEventListener('click', kladblokKlik);
+  el.addEventListener('input', (e) => {
+    if (!kb) return;
+    if (e.target.id === 'bk-tekst') { $('[data-kb="stuur"]').disabled = !e.target.value.trim() || berichtVerstuurt; return; }
+    if (e.target.id !== 'kb-tekst') return;
+    kb.blaadjes[kb.nu] = e.target.value;
+    if (kb.weg) { kb.weg = false; kladblokKnoppen(); }
+    kladblokBewaar();
+  });
+  // Enter verstuurt een berichtje; Shift+Enter geeft een nieuwe regel.
+  el.addEventListener('keydown', (e) => {
+    if (e.target.id === 'bk-tekst' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); berichtjesStuur(); }
+  });
+}
+
+function kladblokOpen() {
+  const kind = kidVan(s.tabletKid);
+  if (!kind) return;
+  kladblokVenster();
+  kb = { modus: 'schrijf', kid: kind.id, ...kladblokLaad(kind.id), weg: false };
+  $('#kladblok').hidden = false;
+  kladblokTeken(true);
+}
+
+function kladblokDicht() {
+  const el = $('#kladblok');
+  if (!el) return;
+  kladblokBewaar();
+  el.hidden = true;
+  el.innerHTML = '';
+  kb = null;
+}
+
+function kladblokKnoppen() {
+  const el = $('#kb-knoppen');
+  if (!el || !kb) return;
+  const tabs = kb.blaadjes.map((b, i) => `<button type="button" class="kb-tab${i === kb.nu ? ' on' : ''}" data-kb="kies" data-i="${i}" aria-pressed="${i === kb.nu}" aria-label="Blaadje ${i + 1}">${i + 1}</button>`).join('');
+  const nieuw = kb.blaadjes.length < MAX_BLAADJES ? '<button type="button" class="kb-tab kb-nieuw" data-kb="nieuw" aria-label="Nieuw blaadje">+</button>' : '';
+  el.innerHTML = `<div class="kb-tabs">${tabs}${nieuw}</div>
+    <button type="button" class="kb-weg${kb.weg ? ' zeker' : ''}" data-kb="weg">${icon(IC.trash, 22, 2)}${kb.weg ? 'Echt weggooien?' : 'Weggooien'}</button>`;
+}
+
+function kladblokTeken(focus) {
+  const kind = kidVan(kb.kid);
+  const thema = kind && MASCOTTE[kind.thema] ? kind.thema : 'geen';
+  const el = $('#kladblok');
+  el.className = 'tablet kladblok thema-' + thema;
+  el.style.background = thema === 'geen' && kind ? kind.zacht : '';
+  el.innerHTML = `
+    <div class="kb-head">
+      <button type="button" class="taken-knop" data-kb="terug">← Terug</button>
+      <span class="hoi">${icon(IC.pen, 30, 2.2)} Mijn kladblok</span>
+      <span class="grow"></span>
+      <span class="t-mascotte">${MASCOTTE[thema](56)}</span>
+    </div>
+    <div class="kb-knoppen" id="kb-knoppen"></div>
+    <textarea id="kb-tekst" class="kb-tekst" aria-label="Kladblok, blaadje ${kb.nu + 1}" placeholder="Tik hier en begin met typen…" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"></textarea>`;
+  $('#kb-tekst').value = kb.blaadjes[kb.nu];
+  kladblokKnoppen();
+  if (focus) {
+    const ta = $('#kb-tekst');
+    ta.focus({ preventScroll: true });
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+}
+
+function kladblokKlik(e) {
+  const k = e.target.closest('[data-kb]');
+  if (!k || !kb) return;
+  const wat = k.dataset.kb;
+  if (wat === 'terug') { kladblokDicht(); return; }
+  if (wat === 'stuur') { berichtjesStuur(); return; }
+  if (wat === 'kies') { kb.nu = Number(k.dataset.i); kb.weg = false; }
+  else if (wat === 'nieuw') {
+    // Een leeg blaadje hergebruiken in plaats van er nog een te maken.
+    const leeg = kb.blaadjes.findIndex((b) => !b.trim());
+    if (leeg >= 0) kb.nu = leeg; else { kb.blaadjes.push(''); kb.nu = kb.blaadjes.length - 1; }
+    kb.weg = false;
+  } else if (wat === 'weg') {
+    if (!kb.blaadjes[kb.nu].trim()) { kb.weg = false; }
+    else if (!kb.weg) { kb.weg = true; kladblokKnoppen(); return; }
+    else {
+      kb.blaadjes.splice(kb.nu, 1);
+      if (!kb.blaadjes.length) kb.blaadjes = [''];
+      kb.nu = Math.min(kb.nu, kb.blaadjes.length - 1);
+      kb.weg = false;
+    }
+  }
+  kladblokBewaar();
+  kladblokTeken(true);
+}
+
+// ---------- berichtjes tussen het kind en papa en mama ----------
+// Staan los van de gewone gegevens (eigen tabel op de server). Ze blijven in de app: geen pushmeldingen.
+// In de demo staan ze in de browser, zodat de ouder-app en de kind-app elkaar kunnen schrijven.
+const BERICHT_DEMO = 'muntjes-berichten-demo';
+let berichten = [];
+let berichtV = -1;
+let berichtHaalt = false;
+let berichtNogEens = false;
+let berichtVerstuurt = false;
+let gelezenBezig = false;
+const magBerichten = () => DEMO || rol === 'ouder';
+const berichtKids = () => s.kids.filter((k) => k.berichten);
+const ongelezen = (kid, van) => berichten.filter((b) => b.kid === kid && b.van === van && !b.gelezen).length;
+const berichtKidNu = () => { const ks = berichtKids(); return ks.some((k) => k.id === s.berichtKid) ? s.berichtKid : ks[0] && ks[0].id; };
+
+function demoBerichten() {
+  try {
+    const d = JSON.parse(localStorage.getItem(BERICHT_DEMO) || 'null');
+    if (Array.isArray(d)) return d;
+  } catch (e) { /* negeren */ }
+  const nu = Date.now();
+  return [
+    { id: 1, kid: 'noor', van: 'kind', naam: 'Noor', tekst: 'Hoi papa! Mogen we vanavond pannenkoeken eten?', ts: nu - 2 * UUR, gelezen: true },
+    { id: 2, kid: 'noor', van: 'ouder', naam: 'Mama', tekst: 'Goed idee! Help jij met het beslag?', ts: nu - 1.8 * UUR, gelezen: true }
+  ];
+}
+function demoBewaar() {
+  try { localStorage.setItem(BERICHT_DEMO, JSON.stringify(berichten)); } catch (e) { /* negeren */ }
+}
+
+async function berichtenHaal(opnieuw) {
+  if (DEMO) { berichten = demoBerichten(); return; }
+  if (!rol || rol === 'familie') return;
+  if (rol === 'kind' && !(kidVan(s.tabletKid) || {}).berichten) return;
+  // Loopt er al een ophaalronde? Dan daarna nog een keer, zodat een net verstuurd berichtje meteen verschijnt.
+  if (berichtHaalt) { if (opnieuw) berichtNogEens = true; return; }
+  berichtHaalt = true;
+  const r = await api('berichten', undefined, '&v=' + (opnieuw ? -1 : berichtV));
+  berichtHaalt = false;
+  if (berichtNogEens) { berichtNogEens = false; return berichtenHaal(true); }
+  if (r.status !== 200) return;
+  const eerder = berichtV !== -1 ? new Set(berichten.map((b) => b.id)) : null;
+  berichtV = r.data.v;
+  berichten = r.data.berichten || [];
+  // Nieuw antwoord van papa of mama: een tikje op de tablet.
+  if (eerder && rol === 'kind' && berichten.some((b) => b.van === 'ouder' && !eerder.has(b.id))) geluid('tik');
+  render();
+}
+
+// Geeft een foutmelding terug, of null als het berichtje verstuurd is.
+async function berichtStuur(kid, tekst, vanKind) {
+  if (DEMO) {
+    const kind = kidVan(kid);
+    berichten = [...demoBerichten(), { id: Math.max(0, ...berichten.map((b) => b.id)) + 1, kid, van: vanKind ? 'kind' : 'ouder', naam: vanKind ? kind.naam : mijnNaam(), tekst, ts: Date.now(), gelezen: false }];
+    demoBewaar();
+    render();
+    return null;
+  }
+  const r = await api('bericht', rol === 'kind' ? { tekst } : { kid, tekst });
+  if (!r.ok) return r.data.fout || 'Niet verstuurd: geen verbinding. Probeer het zo nog eens.';
+  await berichtenHaal(true);
+  return null;
+}
+
+// Berichtjes van de ander als gelezen markeren (kind: die van papa en mama; ouder: die van dit kind).
+async function berichtGelezen(kid, van) {
+  if (!ongelezen(kid, van) || gelezenBezig) return;
+  if (DEMO) {
+    berichten = demoBerichten().map((b) => (b.kid === kid && b.van === van ? { ...b, gelezen: true } : b));
+    demoBewaar();
+    setTimeout(render, 0);
+    return;
+  }
+  gelezenBezig = true;
+  await api('bericht_gelezen', rol === 'kind' ? {} : { kid });
+  gelezenBezig = false;
+  berichtenHaal(true);
+}
+
+function berichtBubbels(kid, mijnKant) {
+  return berichten.filter((b) => b.kid === kid).map((b) => {
+    const mijn = b.van === mijnKant;
+    return `<div class="bb${mijn ? ' mijn' : ''}">
+      <span class="bb-wie">${esc(b.naam)} · ${tijdLabel(b.ts)}</span>
+      <span class="bb-tekst">${esc(b.tekst)}</span>
+      ${mijn && b.gelezen ? `<span class="bb-gelezen">${icon(IC.vink, 14, 3)} gelezen</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function schermBerichten() {
+  if (!berichtKids().length) return '<div class="empty">Berichtjes staan voor geen enkel kind aan. Zet ze per kind aan in Beheer, bij het kind.</div>';
+  const kid = berichtKidNu();
+  const kind = kidVan(kid);
+  const lijst = berichtBubbels(kid, 'ouder');
+  return `
+    ${berichtKids().length > 1 ? `<div class="bo-kids">${berichtKids().map((k) => {
+      const n = ongelezen(k.id, 'kind');
+      return `<button type="button" class="seg-btn${k.id === kid ? ' on' : ''}" aria-pressed="${k.id === kid}" data-a="berichtKid" data-id="${k.id}">${esc(k.naam)}${n ? `<span class="kb-badge">${n}</span>` : ''}</button>`;
+    }).join('')}</div>` : ''}
+    <div class="bo-lijst" id="bo-lijst">${lijst || `<p class="muted" style="margin:auto;text-align:center">Nog geen berichtjes met ${esc(kind.naam)}.<br>${esc(kind.naam)} kan je schrijven vanuit de kind-app.</p>`}</div>
+    <div class="bo-schrijf">
+      <input class="inp" id="bo-tekst" data-input="berichtTekst" value="${esc(s.berichtTekst || '')}" maxlength="500" autocomplete="off" placeholder="Schrijf ${esc(kind.naam)} terug…">
+      <button type="button" class="btn btn-primary" data-a="berichtStuur" ${(s.berichtTekst || '').trim() ? '' : 'disabled'} aria-label="Versturen">${icon(IC.stuur, 20, 2)}</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0;font-size:12px">Berichtjes blijven in de app en worden na 90 dagen gewist. Alleen papa en mama zien ze.</p>`;
+}
+
+// Na het tekenen: naar het nieuwste berichtje scrollen en wat je ziet als gelezen markeren.
+let boAantal = -1;
+function berichtenNaRender() {
+  const l = $('#bo-lijst');
+  if (l && weergave !== 'kind' && s.scherm === 'berichten') {
+    const kid = berichtKidNu();
+    const n = berichten.filter((b) => b.kid === kid).length + ':' + kid;
+    if (n !== boAantal) { boAantal = n; l.scrollTop = l.scrollHeight; }
+    if (document.visibilityState === 'visible') berichtGelezen(kid, 'kind');
+  } else boAantal = -1;
+  if (kb && kb.modus === 'bericht') berichtjesLijst();
+}
+
+// Berichtjes-scherm op de tablet: hetzelfde losse venster als het kladblok.
+function berichtjesOpen() {
+  const kind = kidVan(s.tabletKid);
+  if (!kind) return;
+  kladblokVenster();
+  kb = { modus: 'bericht', kid: kind.id, concept: '', fout: '', aantal: -1 };
+  const thema = MASCOTTE[kind.thema] ? kind.thema : 'geen';
+  const el = $('#kladblok');
+  el.hidden = false;
+  el.className = 'tablet kladblok thema-' + thema;
+  el.style.background = thema === 'geen' ? kind.zacht : '';
+  el.innerHTML = `
+    <div class="kb-head">
+      <button type="button" class="taken-knop" data-kb="terug">← Terug</button>
+      <span class="hoi">${icon(IC.bericht, 30, 2.2)} Berichtjes</span>
+      <span class="grow"></span>
+      <span class="t-mascotte">${MASCOTTE[thema](56)}</span>
+    </div>
+    <div class="bk-lijst" id="bk-lijst"></div>
+    <div class="bk-fout" id="bk-fout" role="alert"></div>
+    <div class="bk-schrijf">
+      <textarea id="bk-tekst" class="kb-tekst bk-tekst" rows="2" maxlength="500" aria-label="Berichtje aan papa en mama" placeholder="Schrijf papa en mama een berichtje…" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"></textarea>
+      <button type="button" class="bk-stuur" data-kb="stuur" disabled>${icon(IC.stuur, 30, 2.2)}<span>Versturen</span></button>
+    </div>`;
+  berichtjesLijst();
+  $('#bk-tekst').focus({ preventScroll: true });
+  berichtenHaal(true);
+}
+
+function berichtjesLijst() {
+  const l = $('#bk-lijst');
+  if (!l || !kb) return;
+  const mijn = berichten.filter((b) => b.kid === kb.kid);
+  const sleutel = mijn.map((b) => b.id + (b.gelezen ? 'g' : '')).join(',');
+  if (sleutel !== kb.aantal) {
+    kb.aantal = sleutel;
+    l.innerHTML = berichtBubbels(kb.kid, 'kind') || '<p class="bk-leeg">Nog geen berichtjes.<br>Schrijf papa en mama iets!</p>';
+    l.scrollTop = l.scrollHeight;
+  }
+  berichtGelezen(kb.kid, 'ouder');
+}
+
+async function berichtjesStuur() {
+  const ta = $('#bk-tekst');
+  const tekst = ta.value.trim();
+  if (!tekst || berichtVerstuurt) return;
+  berichtVerstuurt = true;
+  $('[data-kb="stuur"]').disabled = true;
+  const fout = await berichtStuur(kb.kid, tekst, true);
+  berichtVerstuurt = false;
+  if (!kb || kb.modus !== 'bericht') return;
+  $('#bk-fout').textContent = fout || '';
+  if (!fout) { ta.value = ''; geluid('munt'); }
+  $('[data-kb="stuur"]').disabled = !ta.value.trim();
+  berichtjesLijst();
+  ta.focus({ preventScroll: true });
 }
 
 // ---------- feestje: confetti als er iets verdiend is ----------
@@ -2372,6 +2717,8 @@ function render() {
   $('#col-kind').hidden = weergave === 'ouder';
   $('#ouder').innerHTML = weergave === 'kind' ? '' : !DEMO && !volwassene() ? renderWelkom() : renderOuder();
   $('#kind').innerHTML = weergave === 'ouder' ? '' : renderKind();
+  if (kb && (weergave === 'ouder' || kb.kid !== s.tabletKid || !(kidVan(kb.kid) || {})[kb.modus === 'bericht' ? 'berichten' : 'kladblok'])) kladblokDicht();
+  berichtenNaRender();
   // Even wachten: een ster en de voltooide taak komen vlak na elkaar binnen.
   if (weergave !== 'ouder' && (DEMO || rol === 'kind')) { clearTimeout(zoekTimer); zoekTimer = setTimeout(() => { zoekFeest(); saldoCheck(); }, 60); }
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
@@ -2403,7 +2750,7 @@ document.addEventListener('input', (e) => {
   }
   s = { ...s, [veld]: e.target.value, ovZeker: veld === 'ovReden' ? false : s.ovZeker };
   bewaar();
-  if (veld === 'ovReden') render();
+  if (veld === 'ovReden' || veld === 'berichtTekst') render();
 });
 
 document.addEventListener('change', async (e) => {
@@ -2422,7 +2769,9 @@ document.addEventListener('keydown', (e) => {
     else if (e.key === 'Enter') acties.pinOk();
     return;
   }
+  if (e.key === 'Enter' && e.target.id === 'bo-tekst' && !e.isComposing) { acties.berichtStuur(); return; }
   if (e.key !== 'Escape') return;
+  if (kb) { kladblokDicht(); return; }
   if (s.edit) acties.editSluit();
   else if (s.sheet) acties.sluit();
 });
@@ -2430,6 +2779,7 @@ document.addEventListener('keydown', (e) => {
 // Andere tab met dezelfde preview open? Dan meelopen.
 window.addEventListener('storage', (e) => {
   if (DEMO && e.key === OPSLAG) { s = laad(); render(); }
+  if (DEMO && e.key === BERICHT_DEMO) { berichten = demoBerichten(); render(); }
 });
 window.addEventListener('resize', () => {
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
@@ -2454,8 +2804,8 @@ setInterval(() => {
 if (!DEMO) {
   start();
   // Wijzigingen van het andere apparaat ophalen (alleen als de app in beeld is).
-  setInterval(() => { if (document.visibilityState === 'visible') haal(); }, 4000);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') haal(); });
+  setInterval(() => { if (document.visibilityState === 'visible') { haal(); berichtenHaal(); } }, 4000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { haal(); berichtenHaal(); } });
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
     navigator.serviceWorker.addEventListener('message', (e) => {
@@ -2464,4 +2814,5 @@ if (!DEMO) {
   }
 }
 
+if (DEMO) berichten = demoBerichten();
 render();

@@ -173,6 +173,23 @@ function aanvragen_melden(array $oud, array $nieuw, string $kid): void {
     }
 }
 
+// Aanvragen die niet meer openstaan (goedgekeurd, afgewezen of ingetrokken): de melding daarvan
+// op de telefoons van de ouders weghalen. Wie zelf beslist, ruimt het op zijn eigen telefoon al op in de app.
+function aanvragen_opruimen(array $oud, array $nieuw, ?int $behalve): void {
+    global $db;
+    $nuOpen = [];
+    foreach ($nieuw['tx'] ?? [] as $t) if (is_array($t) && ($t['status'] ?? '') === 'aangevraagd') $nuOpen[(string)($t['id'] ?? '')] = true;
+    $weg = [];
+    foreach ($oud['tx'] ?? [] as $t) {
+        if (!is_array($t) || ($t['status'] ?? '') !== 'aangevraagd' || ($t['bron'] ?? '') !== 'kind') continue;
+        if (!isset($nuOpen[(string)($t['id'] ?? '')])) $weg[] = 'aanvraag-' . $t['id'];
+    }
+    if (!$weg) return;
+    $ouders = array_map('intval', $db->query("SELECT id FROM gebruikers WHERE rol = 'ouder'")->fetchAll(PDO::FETCH_COLUMN));
+    $ouders = array_values(array_filter($ouders, fn($id) => $id !== $behalve));
+    push_naar($ouders, ['tag' => 'opruimen', 'weg' => $weg]);
+}
+
 function push_ontvangers(array $timer): array {
     global $db;
     $ids = array_map('intval', $db->query("SELECT id FROM gebruikers WHERE rol = 'ouder'")->fetchAll(PDO::FETCH_COLUMN));
