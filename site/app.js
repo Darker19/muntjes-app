@@ -116,7 +116,7 @@ const valuta = (kid) => {
   const v = VALUTA[kid && kid.thema] || VALUTA.geen;
   return { ...v, woord: (n) => (n === 1 ? v.een : v.veel) };
 };
-const avatar = (k, size = 28) => `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;background:${k.kleur}" aria-hidden="true">${k.naam[0]}</span>`;
+const avatar = (k, size = 28) => `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px;background:${k.kleur}" aria-hidden="true">${esc((k.naam || '')[0])}</span>`;
 
 // Op welke dag de week begint (instelling weekBegin, 0 = zondag … 6 = zaterdag, standaard maandag).
 const WEEKDAGEN = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
@@ -1240,7 +1240,7 @@ function schermMelden() {
   const kaarten = s.kids.map((k) => {
     const st = stats(k.id);
     return `<button type="button" class="kcard" data-a="logOpen" data-id="${k.id}" aria-label="Logboek van ${esc(k.naam)} deze week">
-      <div class="kname">${avatar(k)}<b>${k.naam}</b></div>
+      <div class="kname">${avatar(k)}<b>${esc(k.naam)}</b></div>
       <div class="kbal">${valuta(k).icoon(22)}<span class="num">${st.beschikbaar}</span><span>${valuta(k).woord(st.beschikbaar)}</span>
         ${takenVan(k.id).length ? `<span class="kster" role="img" aria-label="${sterrenDezeWeek(k.id)} ${sterrenDezeWeek(k.id) === 1 ? 'ster' : 'sterren'} deze week">${ster(20)}<b>${sterrenDezeWeek(k.id)}</b></span>` : ''}</div>
       <div class="muted">Deze week ${st.week}/${s.maxWeek} verdiend</div>
@@ -1250,7 +1250,7 @@ function schermMelden() {
   const klusjes = s.klusjes.map((k) => `
     <button type="button" class="klus" data-a="klusOpen" data-id="${k.id}">
       <span class="icobox">${oIcon(k.icon, 26)}</span>
-      <span class="kl-naam">${k.naam}</span>
+      <span class="kl-naam">${esc(k.naam)}</span>
       <span class="plus">+${k.waarde}</span>
       <span class="muted">${perTekst(k)}${heeftPerKind(k) ? ' · anders per kind' : ''}</span>
     </button>`).join('');
@@ -1270,7 +1270,7 @@ function schermMelden() {
     <div class="grid2">${s.taken.map((t) => `
       <button type="button" class="klus" data-a="taakOpen" data-id="${t.id}">
         <span class="icobox geel">${oIcon(t.icon, 26)}</span>
-        <span class="kl-naam">${t.naam}</span>
+        <span class="kl-naam">${esc(t.naam)}</span>
         <span class="plus">${t.doel} ⭐ = +${t.beloning}</span>
         ${heeftPerKind(t) ? '<span class="muted">Anders per kind</span>' : ''}
       </button>`).join('')}</div>` : ''}`;
@@ -1365,7 +1365,7 @@ function schermAccount() {
 function schermBeheer() {
   if (!magBeheren()) return schermAccount();
   const rij = (soort, id, links, naam, rechts) => `<button type="button" class="lrij" data-a="bewerk" data-x="${soort}" data-id="${id}">
-    ${links}<span class="grow">${naam}</span><span class="r">${rechts}</span>${icon(IC.chev, 18, 2)}
+    ${links}<span class="grow">${esc(naam)}</span><span class="r">${rechts}</span>${icon(IC.chev, 18, 2)}
   </button>`;
   const toevoegen = (soort, tekst) => `<button type="button" class="lrij toevoegen" data-a="nieuw" data-x="${soort}">+ ${tekst}</button>`;
   return `
@@ -1381,7 +1381,7 @@ function schermBeheer() {
         const aan = !!s.kindMelden[k.id];
         return `<button type="button" class="lrij" data-a="meldToggle" data-id="${k.id}" aria-pressed="${aan}">
           ${avatar(k)}
-          <span class="col"><span>${k.naam}</span><small>${aan ? 'Mag zelf klusjes melden' : 'Alleen ouder meldt klusjes'}</small></span>
+          <span class="col"><span>${esc(k.naam)}</span><small>${aan ? 'Mag zelf klusjes melden' : 'Alleen ouder meldt klusjes'}</small></span>
           <span class="switch${aan ? ' on' : ''}"><span></span></span>
         </button>`;
       }).join('')}
@@ -1446,7 +1446,7 @@ function schermBeheer() {
           const k = kidVan(a.kid);
           return `<div class="lrij">
             ${k ? avatar(k) : ''}
-            <span class="col"><span>${a.soort === 'widget' ? 'Widget' : 'Tablet'} · ${k ? k.naam : 'verwijderd kind'}</span><small>Gekoppeld ${tijdLabel(a.aangemaakt * 1000)}${a.laatst ? ' · laatst gezien ' + tijdLabel(a.laatst * 1000) : ''}</small></span>
+            <span class="col"><span>${a.soort === 'widget' ? 'Widget' : 'Tablet'} · ${esc(k ? k.naam : 'verwijderd kind')}</span><small>Gekoppeld ${tijdLabel(a.aangemaakt * 1000)}${a.laatst ? ' · laatst gezien ' + tijdLabel(a.laatst * 1000) : ''}</small></span>
             <button type="button" class="btn btn-outline klein" data-a="ontkoppel" data-id="${a.id}" data-x="${a.soort || 'tablet'}">Ontkoppelen</button>
           </div>`;
         }).join('')
@@ -1479,7 +1479,7 @@ function sheetBewerk() {
       ${(s.taken || []).length ? `<div class="lbl">Taken op slot</div>
       <p class="info" style="margin:-4px 0 8px">Staan bij ${esc(e.naam) || 'het kind'} bovenaan als taken voor de week. De andere taken zijn vrij te melden.</p>
       ${(e.id ? takenVan(e.id) : s.taken).map((t) => `<button type="button" class="lrij" data-a="editVeld" data-x="vast" data-id="${t.id}" aria-pressed="${e.vast.includes(t.id)}">
-        ${oIcon(t.icon, 22)}<span class="grow">${t.naam}</span>
+        ${oIcon(t.icon, 22)}<span class="grow">${esc(t.naam)}</span>
         <span class="switch${e.vast.includes(t.id) ? ' on' : ''}"><span></span></span>
       </button>`).join('')}` : ''}`;
   } else if (e.soort === 'taak') {
@@ -1708,7 +1708,7 @@ function sheetKlus() {
       + (heeftPerKind(k) ? ' · +' + voor.waarde : '');
     return `<button type="button" class="kidpick" style="border-color:${vol ? 'var(--line)' : kid.kleur};background:${vol ? 'var(--soft)' : kid.zacht}" data-a="klusKies" data-id="${kid.id}" ${vol ? 'disabled' : ''}>
       ${avatar(kid, 36)}
-      <span class="col"><b>${kid.naam}</b><small>${sub}</small></span>
+      <span class="col"><b>${esc(kid.naam)}</b><small>${sub}</small></span>
     </button>`;
   }).join('');
   return `<div class="sheet-wrap">
@@ -1716,7 +1716,7 @@ function sheetKlus() {
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-klus" data-scroll="sh-klus">
       <div class="sh-head">
         <span class="icobox" style="width:48px;height:48px;border-radius:14px">${oIcon(k.icon, 28)}</span>
-        <div><div class="sh-title" id="sh-klus">${k.naam}</div><div class="plus" style="font-size:13px">${heeftPerKind(k) ? 'Beloning per kind' : '+' + k.waarde} · ${perTekst(k)}</div></div>
+        <div><div class="sh-title" id="sh-klus">${esc(k.naam)}</div><div class="plus" style="font-size:13px">${heeftPerKind(k) ? 'Beloning per kind' : '+' + k.waarde} · ${perTekst(k)}</div></div>
       </div>
       <div class="lbl">Voor wie?</div>
       ${kids ? `<div class="grid2">${kids}</div>` : '<p class="muted">Dit klusje staat voor geen enkel kind aan.</p>'}
@@ -1738,7 +1738,7 @@ function sheetTaak() {
     const sub = klaar ? 'Voltooid deze week' : n + ' van ' + voor.doel + ' sterren' + (heeftPerKind(taak) ? ' · +' + voor.beloning : '');
     return `<button type="button" class="kidpick" style="border-color:${klaar ? 'var(--line)' : kid.kleur};background:${klaar ? 'var(--soft)' : kid.zacht}" data-a="taakKies" data-id="${kid.id}" ${klaar ? 'disabled' : ''}>
       ${avatar(kid, 36)}
-      <span class="col"><b>${kid.naam}</b><small>${sub}</small></span>
+      <span class="col"><b>${esc(kid.naam)}</b><small>${sub}</small></span>
     </button>`;
   }).join('');
   return `<div class="sheet-wrap">
@@ -1746,7 +1746,7 @@ function sheetTaak() {
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-taak" data-scroll="sh-taak">
       <div class="sh-head">
         <span class="icobox geel" style="width:48px;height:48px;border-radius:14px">${oIcon(taak.icon, 28)}</span>
-        <div><div class="sh-title" id="sh-taak">${taak.naam}</div><div class="plus" style="font-size:13px">${heeftPerKind(taak) ? 'Sterren en beloning per kind' : taak.doel + ' sterren = +' + taak.beloning}</div></div>
+        <div><div class="sh-title" id="sh-taak">${esc(taak.naam)}</div><div class="plus" style="font-size:13px">${heeftPerKind(taak) ? 'Sterren en beloning per kind' : taak.doel + ' sterren = +' + taak.beloning}</div></div>
       </div>
       <div class="lbl">Wie krijgt een ster?</div>
       ${kids ? `<div class="grid2">${kids}</div>` : '<p class="muted">Deze taak staat voor geen enkel kind aan.</p>'}
@@ -1877,7 +1877,7 @@ function sheetOverig() {
       <div class="pills">
         ${s.kids.map((k) => {
           const aan = k.id === s.ovKid;
-          return `<button type="button" class="pill" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="ovKid" data-id="${k.id}">${k.naam}</button>`;
+          return `<button type="button" class="pill" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="ovKid" data-id="${k.id}">${esc(k.naam)}</button>`;
         }).join('')}
       </div>
       <div class="grid2" style="gap:8px">
@@ -1959,7 +1959,7 @@ function renderKind() {
           <span class="ricon">${plaatje(b.icon, thema, 38, 1.5)}</span>
           <span class="chip c-goed">${icon(IC.vink, 14, 3)}${spelT && spelT.gratis ? 'Cadeautje' : 'Goedgekeurd'}</span>
         </span>
-        <span class="rnaam">${b.naam}</span>
+        <span class="rnaam">${esc(b.naam)}</span>
         ${minuten ? `<span class="badges"><span class="duur">${icon(IC.klok, 18, 2)}${minuten} minuten</span></span>` : ''}
         <span class="speel-knop">${icon(IC.speel, 30, 0)}${spelT && spelT.status !== 'wacht' ? 'Verder spelen' : 'Speel nu'}</span>
       </button>`;
@@ -1975,7 +1975,7 @@ function renderKind() {
         <span class="ricon">${plaatje(b.icon, thema, 38, 1.5)}</span>
         ${info.chip ? `<span class="chip c-${status}">${icon(CHIP_ICOON[status], 14, 3)}${info.chip}</span>` : ''}
       </span>
-      <span class="rnaam">${b.naam}</span>
+      <span class="rnaam">${esc(b.naam)}</span>
       <span class="badges">
         ${b.spel ? `<span class="duur">${icon(IC.game, 18, 2)}Spelletje</span>` : ''}
         ${b.duur ? `<span class="duur">${icon(IC.klok, 18, 2)}${b.duur} minuten</span>` : ''}
@@ -2005,7 +2005,7 @@ function renderKind() {
         : vasteTaken.includes(id) ? '<span class="chip c-vrij">🔒 Van papa of mama</span>' : '';
       return `<button type="button" class="tkaart${klaar ? ' s-goed' : open ? ' s-aangevraagd' : ''}" data-a="taakMeld" data-id="${id}">
         <span class="rtop"><span class="ricon">${plaatje(taak.icon, thema, 34, 1.5)}</span>${chip}</span>
-        <span class="rnaam">${taak.naam}</span>
+        <span class="rnaam">${esc(taak.naam)}</span>
         <span class="sterrij" role="img" aria-label="${n} van ${taak.doel} sterren">${rij}</span>
         <span class="voet">${tekst}</span>
       </button>`;
@@ -2036,7 +2036,7 @@ function renderKind() {
             : `<span class="chip ${vol ? 'c-vol' : 'c-vrij'}">${vol ? 'Weeklimiet bereikt' : '+' + k.waarde + ' ' + v.woord(k.waarde)}</span>`;
         return `<button type="button" class="mcard s-${status}${vol || klaar ? ' dim' : ''}" data-a="meld" data-id="${k.id}">
           <span class="ricon">${plaatje(k.icon, thema, 30, 1.5)}</span>
-          <span class="mnaam">${k.naam}</span>
+          <span class="mnaam">${esc(k.naam)}</span>
           ${chip}
           <span class="muted">${perTekst(k)}</span>
         </button>`;
@@ -2047,7 +2047,7 @@ function renderKind() {
     <div class="t-head">
       ${avatar(kind, 52)}
       <span class="t-mascotte">${MASCOTTE[thema](64)}</span>
-      <span class="hoi">Hoi ${kind.naam}!</span>
+      <span class="hoi">Hoi ${esc(kind.naam)}!</span>
       ${takenVan(kind.id).length ? `<button type="button" class="taken-knop${takenScherm ? ' on' : ''}" data-a="kindScherm" data-id="${takenScherm ? 'beloningen' : 'taken'}">${takenScherm ? '← Beloningen' : ster(24) + ' Taken'}</button>` : ''}
       <span class="grow"></span>
       <span class="wk-lbl">Deze week verdiend</span>
@@ -2334,7 +2334,7 @@ function renderBar() {
       <span class="bar-lbl">Tablet van</span>
       ${s.kids.map((k) => {
         const aan = s.tabletKid === k.id;
-        return `<button type="button" class="seg-btn" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="tablet" data-id="${k.id}">${k.naam}</button>`;
+        return `<button type="button" class="seg-btn" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="tablet" data-id="${k.id}">${esc(k.naam)}</button>`;
       }).join('')}
       ${kidVan(s.tabletKid) ? `<button type="button" class="seg-btn${kidVan(s.tabletKid).groot ? ' on' : ''}" aria-pressed="${!!kidVan(s.tabletKid).groot}" data-a="groot">Grote plaatjes</button>` : ''}
     </div>`;
