@@ -349,6 +349,7 @@ async function synchroniseer() {
       if (r.ok) {
         versie = r.data.versie;
         onbevestigd.splice(0, n);
+        meldingenOpruimen();
       } else if (r.status === 409) {
         s = { ...s, ...(r.data.data || startData()) };
         versie = r.data.versie;
@@ -380,6 +381,19 @@ async function haal(alles) {
   if (r.data.data) s = { ...s, ...r.data.data };
   if (rol === 'kind' && !kidVan(s.tabletKid)) { zetToken(''); afgemeld(); return; }
   render();
+  meldingenOpruimen();
+}
+
+// Meldingen van aanvragen die niet meer openstaan van deze telefoon halen
+// (bijv. net goedgekeurd, hier of door de andere ouder).
+async function meldingenOpruimen() {
+  if (DEMO || !volwassene() || !versie || !('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg || !reg.getNotifications) return;
+    const open = new Set(s.tx.filter((t) => t.status === 'aangevraagd').map((t) => 'aanvraag-' + t.id));
+    (await reg.getNotifications()).forEach((n) => { if (n.tag.startsWith('aanvraag-') && !open.has(n.tag)) n.close(); });
+  } catch (e) { /* negeren */ }
 }
 
 function afgemeld() {

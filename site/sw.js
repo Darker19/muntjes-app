@@ -4,7 +4,7 @@
  * zonder internet wordt de laatst bewaarde versie getoond. api.php gaat nooit via de cache.
  * Toont ook de pushmeldingen ("Tijd is om") die de server stuurt.
  */
-const CACHE = "muntjes-v3";
+const CACHE = "muntjes-v4";
 const SHELL = ["./", "style.css", "app.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
@@ -43,6 +43,11 @@ self.addEventListener("fetch", e => {
 self.addEventListener("push", e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { /* geen JSON */ }
+  // Aanvraag afgehandeld (ook op een andere telefoon): de melding ervan weghalen, niets nieuws tonen.
+  if (Array.isArray(d.weg)) {
+    e.waitUntil(self.registration.getNotifications().then(lijst => lijst.forEach(n => { if (d.weg.includes(n.tag)) n.close(); })));
+    return;
+  }
   const timer = String(d.tag || "").startsWith("timer");
   const aanvraag = String(d.tag || "").startsWith("aanvraag");
   e.waitUntil(self.registration.showNotification(d.titel || "Muntjes", {

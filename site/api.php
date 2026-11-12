@@ -792,16 +792,17 @@ switch ($actie) {
         $oudeData = $s ? json_decode($s['data'], true) : [];
         $teSturen = widgets_met_wijziging($oudeData, $in['data']);
         $aanvraagKid = $w['rol'] === 'kind' ? $w['kid'] : null;
-        if ($teSturen || $aanvraagKid) {
-            register_shutdown_function(function () use ($teSturen, $aanvraagKid, $oudeData, $in) {
-                if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
-                if ($teSturen) stuur_push($teSturen);
-                if ($aanvraagKid) {
-                    try { aanvragen_melden($oudeData, $in['data'], $aanvraagKid); }
-                    catch (Throwable $e) { error_log('muntjes aanvraag-push: ' . $e->getMessage()); }
-                }
-            });
-        }
+        $beslisser = $w['rol'] === 'ouder' ? $w['id'] : null;
+        register_shutdown_function(function () use ($teSturen, $aanvraagKid, $oudeData, $in, $beslisser) {
+            if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+            if ($teSturen) stuur_push($teSturen);
+            if ($aanvraagKid) {
+                try { aanvragen_melden($oudeData, $in['data'], $aanvraagKid); }
+                catch (Throwable $e) { error_log('muntjes aanvraag-push: ' . $e->getMessage()); }
+            }
+            try { aanvragen_opruimen($oudeData, $in['data'], $beslisser); }
+            catch (Throwable $e) { error_log('muntjes opruim-push: ' . $e->getMessage()); }
+        });
         out(['versie' => $huidig + 1]);
     }
 
