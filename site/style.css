@@ -444,3 +444,24 @@ body.bare .vlieg-laag { border-radius: 0; }
   .rcard { padding: 14px; }
   .rnaam { font-size: 18px; }
 }
+
+/* Kladblok: vrij typen met het toetsenbord van de tablet */
+.tablet-wrap > .tablet.kladblok { position: absolute; inset: 0; z-index: 15; height: auto; padding: 0 28px 24px; gap: 14px; }
+.tablet.kladblok[hidden] { display: none; }
+.kb-head { display: flex; align-items: center; gap: 16px; padding-top: 20px; }
+.kb-head .hoi { display: inline-flex; align-items: center; gap: 10px; }
+.tablet:is(.thema-eenhoorn, .thema-dino) .kb-head .hoi { color: var(--t-accent); }
+.kb-knoppen { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.kb-tabs { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+.kb-tab { width: 48px; height: 48px; border-radius: 14px; border: 2px solid var(--t-rand, var(--line)); background: #fff; font-family: Fredoka, sans-serif; font-size: 22px; font-weight: 600; color: var(--muted); }
+.kb-tab.on { background: var(--t-accent, var(--accent)); border-color: var(--t-accent, var(--accent)); color: #fff; }
+.kb-nieuw { border-style: dashed; color: var(--t-accent, var(--accent)); }
+.kb-weg { min-height: 48px; padding: 0 16px; border-radius: 999px; border: 2px solid var(--line); background: #fff; display: inline-flex; align-items: center; gap: 8px; font-family: Fredoka, sans-serif; font-size: 18px; font-weight: 600; color: var(--muted); }
+.kb-weg.zeker { background: var(--red-bg); border-color: var(--red); color: var(--red-tx); }
+.kb-tekst { flex: 1; min-height: 0; width: 100%; resize: none; border: 3px solid var(--t-rand, var(--line)); border-radius: 24px; background: #fff; padding: 20px 24px; font-family: Nunito, sans-serif; font-size: 30px; line-height: 1.5; font-weight: 700; color: var(--ink); outline: none; }
+.kb-tekst:focus { border-color: var(--t-accent, var(--accent)); }
+.kb-tekst::placeholder { color: #AEB6C1; }
+@media (max-width: 760px) {
+  .tablet-wrap > .tablet.kladblok { padding: 0 16px 16px; }
+  .kb-tekst { font-size: 24px; padding: 16px; }
+}

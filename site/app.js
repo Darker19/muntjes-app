@@ -49,6 +49,7 @@ const IC = {
   beheer: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
   vink: 'M5 12.5l4.5 4.5L19 7.5',
   kruis: 'M6 6l12 12M18 6L6 18',
+  pen: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4',
   speel: 'M8 5.5v13a.8.8 0 0 0 1.2.7l10.4-6.5a.8.8 0 0 0 0-1.4L9.2 4.8A.8.8 0 0 0 8 5.5z'
 };
 
@@ -1100,6 +1101,7 @@ const acties = {
   groot() { zet((st) => ({ kids: st.kids.map((k) => (k.id === st.tabletKid ? { ...k, groot: !k.groot } : k)) })); },
   feestWeg() { volgendFeest(); },
   kindScherm(d) { zet({ kindScherm: d.id }); },
+  kladblok() { kladblokOpen(); },
   // Kind meldt dat het een taak gedaan heeft; papa of mama geeft de ster.
   taakMeld(d) {
     const kid = s.tabletKid;
@@ -2049,6 +2051,7 @@ function renderKind() {
       <span class="t-mascotte">${MASCOTTE[thema](64)}</span>
       <span class="hoi">Hoi ${kind.naam}!</span>
       ${takenVan(kind.id).length ? `<button type="button" class="taken-knop${takenScherm ? ' on' : ''}" data-a="kindScherm" data-id="${takenScherm ? 'beloningen' : 'taken'}">${takenScherm ? '← Beloningen' : ster(24) + ' Taken'}</button>` : ''}
+      <button type="button" class="taken-knop schrijf-knop" data-a="kladblok">${icon(IC.pen, 24, 2.2)} Schrijven</button>
       <span class="grow"></span>
       <span class="wk-lbl">Deze week verdiend</span>
       <span class="wk" role="img" aria-label="${st.week} van ${s.maxWeek}">${vakjes}</span>
@@ -2085,6 +2088,114 @@ function renderKind() {
       </div>
     </div>
     ${s.toast && weergave === 'kind' ? `<div class="toast kind-toast" role="status"><span>${esc(s.toast)}</span></div>` : ''}`;
+}
+
+// ---------- kladblok: vrij typen om te oefenen met het toetsenbord van de tablet ----------
+// Staat los van render(), zodat het tekstvak niet opnieuw getekend wordt terwijl het kind typt.
+// De blaadjes blijven alleen op deze tablet bewaard (per kind).
+const KLADBLOK = 'muntjes-kladblok-';
+const MAX_BLAADJES = 10;
+let kb = null;
+
+function kladblokLaad(kidId) {
+  try {
+    const d = JSON.parse(localStorage.getItem(KLADBLOK + kidId) || 'null');
+    if (d && Array.isArray(d.blaadjes) && d.blaadjes.length) return { blaadjes: d.blaadjes.map(String).slice(0, MAX_BLAADJES), nu: Math.min(d.nu | 0, d.blaadjes.length - 1) };
+  } catch (e) { /* negeren */ }
+  return { blaadjes: [''], nu: 0 };
+}
+
+function kladblokBewaar() {
+  if (!kb) return;
+  try { localStorage.setItem(KLADBLOK + kb.kid, JSON.stringify({ blaadjes: kb.blaadjes, nu: kb.nu })); } catch (e) { /* negeren */ }
+}
+
+function kladblokOpen() {
+  const kind = kidVan(s.tabletKid);
+  if (!kind) return;
+  kb = { kid: kind.id, ...kladblokLaad(kind.id), weg: false };
+  let el = $('#kladblok');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'kladblok';
+    $('#kind').parentNode.appendChild(el);
+    el.addEventListener('click', kladblokKlik);
+    el.addEventListener('input', (e) => {
+      if (e.target.id !== 'kb-tekst') return;
+      kb.blaadjes[kb.nu] = e.target.value;
+      if (kb.weg) { kb.weg = false; kladblokKnoppen(); }
+      kladblokBewaar();
+    });
+  }
+  el.hidden = false;
+  kladblokTeken(true);
+}
+
+function kladblokDicht() {
+  const el = $('#kladblok');
+  if (!el) return;
+  kladblokBewaar();
+  el.hidden = true;
+  el.innerHTML = '';
+  kb = null;
+}
+
+function kladblokKnoppen() {
+  const el = $('#kb-knoppen');
+  if (!el || !kb) return;
+  const tabs = kb.blaadjes.map((b, i) => `<button type="button" class="kb-tab${i === kb.nu ? ' on' : ''}" data-kb="kies" data-i="${i}" aria-pressed="${i === kb.nu}" aria-label="Blaadje ${i + 1}">${i + 1}</button>`).join('');
+  const nieuw = kb.blaadjes.length < MAX_BLAADJES ? '<button type="button" class="kb-tab kb-nieuw" data-kb="nieuw" aria-label="Nieuw blaadje">+</button>' : '';
+  el.innerHTML = `<div class="kb-tabs">${tabs}${nieuw}</div>
+    <button type="button" class="kb-weg${kb.weg ? ' zeker' : ''}" data-kb="weg">${icon(IC.trash, 22, 2)}${kb.weg ? 'Echt weggooien?' : 'Weggooien'}</button>`;
+}
+
+function kladblokTeken(focus) {
+  const kind = kidVan(kb.kid);
+  const thema = kind && MASCOTTE[kind.thema] ? kind.thema : 'geen';
+  const el = $('#kladblok');
+  el.className = 'tablet kladblok thema-' + thema;
+  el.style.background = thema === 'geen' && kind ? kind.zacht : '';
+  el.innerHTML = `
+    <div class="kb-head">
+      <button type="button" class="taken-knop" data-kb="terug">← Terug</button>
+      <span class="hoi">${icon(IC.pen, 30, 2.2)} Mijn kladblok</span>
+      <span class="grow"></span>
+      <span class="t-mascotte">${MASCOTTE[thema](56)}</span>
+    </div>
+    <div class="kb-knoppen" id="kb-knoppen"></div>
+    <textarea id="kb-tekst" class="kb-tekst" aria-label="Kladblok, blaadje ${kb.nu + 1}" placeholder="Tik hier en begin met typen…" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"></textarea>`;
+  $('#kb-tekst').value = kb.blaadjes[kb.nu];
+  kladblokKnoppen();
+  if (focus) {
+    const ta = $('#kb-tekst');
+    ta.focus({ preventScroll: true });
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+}
+
+function kladblokKlik(e) {
+  const k = e.target.closest('[data-kb]');
+  if (!k || !kb) return;
+  const wat = k.dataset.kb;
+  if (wat === 'terug') { kladblokDicht(); return; }
+  if (wat === 'kies') { kb.nu = Number(k.dataset.i); kb.weg = false; }
+  else if (wat === 'nieuw') {
+    // Een leeg blaadje hergebruiken in plaats van er nog een te maken.
+    const leeg = kb.blaadjes.findIndex((b) => !b.trim());
+    if (leeg >= 0) kb.nu = leeg; else { kb.blaadjes.push(''); kb.nu = kb.blaadjes.length - 1; }
+    kb.weg = false;
+  } else if (wat === 'weg') {
+    if (!kb.blaadjes[kb.nu].trim()) { kb.weg = false; }
+    else if (!kb.weg) { kb.weg = true; kladblokKnoppen(); return; }
+    else {
+      kb.blaadjes.splice(kb.nu, 1);
+      if (!kb.blaadjes.length) kb.blaadjes = [''];
+      kb.nu = Math.min(kb.nu, kb.blaadjes.length - 1);
+      kb.weg = false;
+    }
+  }
+  kladblokBewaar();
+  kladblokTeken(true);
 }
 
 // ---------- feestje: confetti als er iets verdiend is ----------
@@ -2372,6 +2483,7 @@ function render() {
   $('#col-kind').hidden = weergave === 'ouder';
   $('#ouder').innerHTML = weergave === 'kind' ? '' : !DEMO && !volwassene() ? renderWelkom() : renderOuder();
   $('#kind').innerHTML = weergave === 'ouder' ? '' : renderKind();
+  if (kb && (weergave === 'ouder' || kb.kid !== s.tabletKid)) kladblokDicht();
   // Even wachten: een ster en de voltooide taak komen vlak na elkaar binnen.
   if (weergave !== 'ouder' && (DEMO || rol === 'kind')) { clearTimeout(zoekTimer); zoekTimer = setTimeout(() => { zoekFeest(); saldoCheck(); }, 60); }
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
@@ -2423,6 +2535,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key !== 'Escape') return;
+  if (kb) { kladblokDicht(); return; }
   if (s.edit) acties.editSluit();
   else if (s.sheet) acties.sluit();
 });
