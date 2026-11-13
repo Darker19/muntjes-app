@@ -117,6 +117,12 @@ button.kcard:active { background: var(--grey-bg); }
 .req-top { display: flex; align-items: center; gap: 12px; }
 .req-top b { font-size: 15px; }
 .req-amt { font-size: 13px; font-weight: 800; white-space: nowrap; }
+.iwrij { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px; border: 2px solid var(--line); border-radius: 14px; background: #fff; text-align: left; width: 100%; }
+.iwrij .grow { display: flex; flex-direction: column; gap: 2px; }
+.iwrij b { font-size: 15px; }
+.iwrij.on { border-color: var(--accent); background: var(--accent-soft); }
+.iwrij.dim { opacity: .6; }
+.iwprijs { font-weight: 800; font-size: 15px; color: var(--red-tx); white-space: nowrap; }
 .empty { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 24px; text-align: center; color: var(--muted); font-weight: 700; font-size: 14px; }
 
 .btn { min-height: 44px; border-radius: 12px; border: 0; font-weight: 800; font-size: 14px; padding: 0 16px; }

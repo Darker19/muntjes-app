@@ -699,7 +699,7 @@ const acties = {
     zet({ scherm: d.id, sheet: null });
     if (!DEMO && d.id === 'beheer' && rol === 'ouder') laadBeheer();
   },
-  sluit() { zet({ sheet: null, bericht: '', ovZeker: false }); },
+  sluit() { zet({ sheet: null, bericht: '', ovZeker: false, iwZeker: false }); },
   logOpen(d) { if (kidVan(d.id)) zet({ sheet: { type: 'log', id: d.id } }); },
 
   klusOpen(d) {
@@ -762,6 +762,45 @@ const acties = {
       }) };
     });
     melding(b.naam + ' staat aan voor ' + naam + ' · ' + min + ' min');
+  },
+  // Beloning inwisselen namens een kind (alleen ouders): meteen goedgekeurd, net als
+  // een aanvraag van de tablet die een ouder goedkeurt (muntjes eraf, timer klaar).
+  inwisselOpen() {
+    if (!magBeheren()) return;
+    if (!s.kids.length) { melding('Voeg eerst een kind toe in Beheer'); return; }
+    if (!s.beloningen.length) { melding('Voeg eerst een beloning toe in Beheer'); return; }
+    zet({ sheet: { type: 'inwissel' }, iwKid: kidVan(s.iwKid) ? s.iwKid : s.kids[0].id, iwBel: belVan(s.iwBel) ? s.iwBel : s.beloningen[0].id, iwZeker: false });
+  },
+  iwKid(d) { zet({ iwKid: d.id, iwZeker: false }); },
+  iwBel(d) { zet({ iwBel: d.id, iwZeker: false }); },
+  iwBevestig() {
+    if (!magBeheren()) return;
+    const i = inwisselInfo();
+    if (!i) return;
+    // Heeft het kind deze beloning zelf al aangevraagd? Dan die aanvraag goedkeuren.
+    if (i.open) { zet({ sheet: null, iwZeker: false }); acties.beslis({ id: String(i.open.id), x: 'ja' }); return; }
+    if (i.tekort) return;
+    if (i.status === 'op' && !s.iwZeker) { zet({ iwZeker: true }); return; }
+    const { kind, b } = i;
+    const door = mijnNaam();
+    let gelukt = false;
+    zet({ sheet: null, iwZeker: false });
+    zet((st) => {
+      // Ook bij opnieuw uitvoeren (na een conflict) rekenen met de nieuwste gegevens:
+      // het saldo kan nooit onder 0.
+      const mijn = st.tx.filter((t) => t.kid === kind.id);
+      const vrij = mijn.filter((t) => t.status === 'goed').reduce((a, t) => a + t.amount, 0)
+        - mijn.filter((t) => t.status === 'aangevraagd' && t.amount < 0).reduce((a, t) => a - t.amount, 0);
+      if (vrij < b.kosten) { gelukt = false; return {}; }
+      gelukt = true;
+      const id = st.nextId;
+      return {
+        tx:[{ msg: '', kid: kind.id, type: 'beloning', ref: b.id, label: b.naam, amount: -b.kosten, status: 'goed', bron: 'ouder', door, id, ts: Date.now() }, ...st.tx],
+        nextId: id + 1,
+        timers: b.duur ? [...st.timers, { id: 't' + id, kid: kind.id, ref: b.id, naam: b.naam, totaal: b.duur * 60, rest: b.duur * 60, status: 'wacht', eind: null }] : st.timers
+      };
+    });
+    melding(gelukt ? kind.naam + ': ' + b.naam + ' ingewisseld' + (b.duur ? ' · timer klaar' : '') : kind.naam + ' heeft niet genoeg ' + valuta(kind).veel);
   },
   overigOpen() {
     if (!s.kids.length) { melding('Voeg eerst een kind toe in Beheer'); return; }
@@ -1193,6 +1232,16 @@ function overigInfo() {
   return { kind, isMin, max, aantal, uit };
 }
 
+function inwisselInfo() {
+  const kind = kidVan(s.iwKid);
+  const b = belVan(s.iwBel);
+  if (!kind || !b) return null;
+  const vrij = stats(kind.id).beschikbaar;
+  const status = belStatus(kind.id, b);
+  const open = s.tx.find((t) => t.kid === kind.id && t.type === 'beloning' && t.ref === b.id && t.status === 'aangevraagd') || null;
+  return { kind, b, vrij, status, open, tekort: !open && vrij < b.kosten };
+}
+
 // Regel in Beheer/Account: meldingen aan of uit op deze telefoon.
 // Plaatjes in de ouder-app: lijntjes (standaard) of de tekeningen van een thema.
 // Per telefoon onthouden; het thema van de kinderen verandert er niet door.
@@ -1266,7 +1315,7 @@ function renderOuder() {
         </button>`).join('')}
     </nav>
     ${s.toast ? `<div class="toast" role="status">${coin(22)}<span>${esc(s.toast)}</span></div>` : ''}
-    ${sheetKlus()}${sheetTaak()}${sheetOverig()}${sheetGratis()}${sheetLog()}${sheetBewerk()}${sheetPin()}${sheetGebruiker()}${sheetTerugzet()}`;
+    ${sheetKlus()}${sheetTaak()}${sheetOverig()}${sheetInwissel()}${sheetGratis()}${sheetLog()}${sheetBewerk()}${sheetPin()}${sheetGebruiker()}${sheetTerugzet()}`;
 }
 
 function schermMelden() {
@@ -1337,6 +1386,7 @@ function schermAanvragen() {
     </div>`;
   }).join('');
   return `
+    ${magBeheren() && s.kids.length && s.beloningen.length ? `<button type="button" class="btn btn-primary vol mb" data-a="inwisselOpen">${icon(IC.gift, 18, 2)} Beloning inwisselen voor een kind</button>` : ''}
     <h2 class="sec">Wacht op goedkeuring</h2>
     <p class="sec-sub">Aanvragen en gemelde klusjes van de kinderen.</p>
     ${lijst.length ? `<div class="stack">${items}</div>` : '<div class="empty">Geen openstaande aanvragen. Vraag op de tablet een beloning aan of meld een klusje om dit te testen.</div>'}`;
@@ -1904,6 +1954,55 @@ function sheetGratis() {
       <div class="flex">
         <button type="button" class="btn btn-soft" data-a="sluit">Annuleren</button>
         <button type="button" class="btn wide btn-green" data-a="grBevestig">Aanzetten voor ${esc(kid.naam)}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function sheetInwissel() {
+  if (!s.sheet || s.sheet.type !== 'inwissel') return '';
+  const i = inwisselInfo();
+  if (!i) return '';
+  const { kind, b, vrij } = i;
+  const v = valuta(kind);
+  const rijen = s.beloningen.map((x) => {
+    const aan = x.id === b.id;
+    const kort = vrij < x.kosten && belStatus(kind.id, x) !== 'aangevraagd';
+    return `<button type="button" class="iwrij${aan ? ' on' : ''}${kort ? ' dim' : ''}" aria-pressed="${aan}" data-a="iwBel" data-id="${x.id}">
+      <span class="icobox wit">${oIcon(x.icon, 24)}</span>
+      <span class="grow"><b>${esc(x.naam)}</b><span class="muted">${esc(perTekst(x))}${x.duur ? ' · ' + x.duur + ' min' : ''}</span></span>
+      <span class="iwprijs">−${x.kosten}</span>
+    </button>`;
+  }).join('');
+  const n = gebruikt(kind.id, 'beloning', b);
+  let uitleg = '';
+  let cta = 'Inwisselen voor ' + kind.naam;
+  if (i.open) {
+    uitleg = `<p class="muted" style="margin:0">${esc(kind.naam)} heeft dit zelf al aangevraagd. Je keurt die aanvraag nu goed.</p>`;
+    cta = 'Aanvraag goedkeuren';
+  } else if (i.tekort) {
+    uitleg = `<div class="warn">${esc(kind.naam)} heeft ${vrij} vrije ${esc(v.woord(vrij))} en ${esc(b.naam)} kost ${b.kosten}. Het saldo kan niet onder 0.</div>`;
+  } else if (i.status === 'op') {
+    uitleg = `<div class="warn">${esc(b.naam)} is ${esc(periodeNu(b.per))} al ${n}× gebruikt (max. ${esc(perTekst(b))}).${s.iwZeker ? ' Toch inwisselen?' : ''}</div>`;
+    if (s.iwZeker) cta = 'Ja, toch inwisselen';
+  } else {
+    uitleg = `<p class="muted" style="margin:0">Gaat er meteen af: ${b.kosten} ${esc(v.woord(b.kosten))}, daarna heeft ${esc(kind.naam)} er nog ${vrij - b.kosten}.${b.duur ? ' De timer van ' + b.duur + ' minuten staat dan klaar.' : ''}</p>`;
+  }
+  return `<div class="sheet-wrap">
+    <button type="button" class="sheet-bg" data-a="sluit" aria-label="Sluiten"></button>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-iw" data-scroll="sh-iw">
+      <div class="sh-title" id="sh-iw">Beloning inwisselen</div>
+      <div class="pills wrap">
+        ${s.kids.map((k) => {
+          const aan = k.id === kind.id;
+          return `<button type="button" class="pill" style="${aan ? `background:${k.kleur};border-color:${k.kleur};color:#fff` : ''}" aria-pressed="${aan}" data-a="iwKid" data-id="${k.id}">${esc(k.naam)} · ${stats(k.id).beschikbaar}</button>`;
+        }).join('')}
+      </div>
+      <div class="stack" style="gap:8px">${rijen}</div>
+      ${uitleg}
+      <div class="flex">
+        <button type="button" class="btn btn-soft" data-a="sluit">Annuleren</button>
+        <button type="button" class="btn wide ${i.status === 'op' && !i.open ? 'btn-red' : 'btn-green'}" data-a="iwBevestig" ${i.tekort ? 'disabled' : ''}>${esc(cta)}</button>
       </div>
     </div>
   </div>`;
@@ -2584,12 +2683,14 @@ function saldoCheck() {
   const st = stats(kind.id);
   const bel = (status) => s.tx.filter((t) => t.kid === kind.id && t.type === 'beloning' && t.status === status);
   const oud = saldoBasis;
-  saldoBasis = { kid: kind.id, waarde: st.beschikbaar, afgewezen: new Set(bel('afgewezen').map((t) => t.id)), open: new Map(bel('aangevraagd').map((t) => [t.id, t.ref])) };
+  saldoBasis = { kid: kind.id, waarde: st.beschikbaar, afgewezen: new Set(bel('afgewezen').map((t) => t.id)), open: new Map(bel('aangevraagd').map((t) => [t.id, t.ref])), goed: new Set(bel('goed').map((t) => t.id)) };
   if (!oud || oud.kid !== kind.id || oud.waarde === st.beschikbaar) return;
   const verschil = st.beschikbaar - oud.waarde;
   const getoond = saldoAnim && saldoAnim.kid === kind.id ? saldoTonen(kind.id, oud.waarde) : oud.waarde;
   const terug = bel('afgewezen').filter((t) => !oud.afgewezen.has(t.id));
   const nieuwOpen = bel('aangevraagd').filter((t) => !oud.open.has(t.id));
+  // Door papa of mama ingewisseld (meteen goedgekeurd): de muntjes gaan ook naar de kaart.
+  const ingewisseld = bel('goed').filter((t) => t.bron === 'ouder' && !oud.open.has(t.id) && !(oud.goed && oud.goed.has(t.id)));
   const geannuleerd = [...oud.open].filter(([id]) => !s.tx.some((t) => t.id === id));
   const n = Math.min(6, Math.abs(verschil));
   if (verschil > 0 && geannuleerd.length && !terug.length) {
@@ -2601,6 +2702,8 @@ function saldoCheck() {
     vlieg(kind, n, 'boven', 'saldo', 'munt');
   } else if (nieuwOpen.length) {
     vlieg(kind, n, 'saldo', kaartVan(nieuwOpen[0].ref), null);
+  } else if (ingewisseld.length) {
+    vlieg(kind, n, 'saldo', kaartVan(ingewisseld[0].ref), null);
   }
   tel(kind.id, getoond, st.beschikbaar, verschil > 0 ? 350 : 0);
 }
