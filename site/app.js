@@ -2387,8 +2387,8 @@ function kladblokKlik(e) {
     if (leeg >= 0) kb.nu = leeg; else { kb.blaadjes.push(''); kb.nu = kb.blaadjes.length - 1; }
     kb.weg = false;
   } else if (wat === 'weg') {
-    if (!kb.blaadjes[kb.nu].trim()) { kb.weg = false; }
-    else if (!kb.weg) { kb.weg = true; kladblokKnoppen(); return; }
+    // Een leeg blaadje gaat meteen weg; een blaadje met tekst vraagt een tweede tik.
+    if (kb.blaadjes[kb.nu].trim() && !kb.weg) { kb.weg = true; kladblokKnoppen(); return; }
     else {
       kb.blaadjes.splice(kb.nu, 1);
       if (!kb.blaadjes.length) kb.blaadjes = [''];
