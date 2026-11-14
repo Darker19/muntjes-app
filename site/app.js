@@ -2237,22 +2237,60 @@ function renderKind() {
 
 // ---------- kladblok: vrij typen om te oefenen met het toetsenbord van de tablet ----------
 // Staat los van render(), zodat het tekstvak niet opnieuw getekend wordt terwijl het kind typt.
-// De blaadjes blijven alleen op deze tablet bewaard (per kind).
+// De blaadjes staan op de server (per kind), met een kopie op de tablet voor als er even geen internet is.
+// Blaadjes die alleen nog op de tablet staan (van vóór de server, of uit een andere browser) worden erbij gezet.
 const KLADBLOK = 'muntjes-kladblok-';
 const MAX_BLAADJES = 10;
 let kb = null;
+let kbTimer = 0;
+let kbOpent = false;
 
-function kladblokLaad(kidId) {
+function kladblokLokaal(kidId) {
   try {
     const d = JSON.parse(localStorage.getItem(KLADBLOK + kidId) || 'null');
-    if (d && Array.isArray(d.blaadjes) && d.blaadjes.length) return { blaadjes: d.blaadjes.map(String).slice(0, MAX_BLAADJES), nu: Math.max(0, Math.min(d.nu | 0, d.blaadjes.length - 1)) };
+    if (d && Array.isArray(d.blaadjes) && d.blaadjes.length) return { blaadjes: d.blaadjes.map(String).slice(0, MAX_BLAADJES), nu: d.nu | 0, vuil: !!d.vuil };
   } catch (e) { /* negeren */ }
-  return { blaadjes: [''], nu: 0 };
+  return { blaadjes: [''], nu: 0, vuil: false };
 }
 
-function kladblokBewaar() {
+// Eerst de blaadjes van 'eerst', daarna die van 'erbij' die er nog niet in staan (lege overslaan).
+// Een blaadje van 'erbij' waar in 'eerst' alleen verder op is getypt, is een oudere versie en komt er niet bij.
+function kladblokSamen(eerst, erbij) {
+  const uit = eerst.filter((b) => b.trim());
+  const al = new Set(uit.map((b) => b.trim()));
+  const ouder = (b) => uit.some((u) => u.trim().startsWith(b.trim()));
+  for (const b of erbij) if (b.trim() && !al.has(b.trim()) && !ouder(b) && uit.length < MAX_BLAADJES) { uit.push(b); al.add(b.trim()); }
+  return uit.length ? uit : [''];
+}
+
+async function kladblokLaad(kidId) {
+  const lok = kladblokLokaal(kidId);
+  const klaar = (blaadjes, nu, vuil) => ({ blaadjes, nu: Math.max(0, Math.min(nu, blaadjes.length - 1)), vuil });
+  if (DEMO || rol !== 'kind') return klaar(lok.blaadjes, lok.nu, false);
+  const r = await Promise.race([api('kladblok'), new Promise((ok) => setTimeout(() => ok({ ok: false }), 4000))]);
+  if (!r.ok) return klaar(lok.blaadjes, lok.nu, lok.vuil);   // geen internet: verder op de tablet
+  const srv = (r.data.blaadjes || []).map(String).slice(0, MAX_BLAADJES);
+  // Niet bewaarde wijzigingen op de tablet gaan voor; anders is de server leidend.
+  const blaadjes = lok.vuil ? kladblokSamen(lok.blaadjes, srv) : kladblokSamen(srv, lok.blaadjes);
+  const nu = lok.vuil ? lok.nu : (r.data.nu | 0);
+  const anders = JSON.stringify(blaadjes) !== JSON.stringify(srv.length ? srv : ['']);
+  return klaar(blaadjes, nu, anders);
+}
+
+function kladblokBewaar(meteen) {
   if (!kb || kb.modus !== 'schrijf') return;
-  try { localStorage.setItem(KLADBLOK + kb.kid, JSON.stringify({ blaadjes: kb.blaadjes, nu: kb.nu })); } catch (e) { /* negeren */ }
+  const kid = kb.kid;
+  const data = { blaadjes: kb.blaadjes.slice(), nu: kb.nu };
+  const lokaal = (vuil) => { try { localStorage.setItem(KLADBLOK + kid, JSON.stringify({ ...data, vuil })); } catch (e) { /* negeren */ } };
+  if (DEMO || rol !== 'kind') { lokaal(false); return; }
+  lokaal(true);
+  clearTimeout(kbTimer);
+  const stuur = async () => {
+    const r = await api('kladblok_bewaar', data);
+    // Alleen schoon markeren als er intussen niets meer getypt is.
+    if (r.ok && !(kb && kb.kid === kid && JSON.stringify(kb.blaadjes) !== JSON.stringify(data.blaadjes))) lokaal(false);
+  };
+  if (meteen) stuur(); else kbTimer = setTimeout(stuur, 1500);
 }
 
 function kladblokVenster() {
@@ -2261,6 +2299,8 @@ function kladblokVenster() {
   el.id = 'kladblok';
   $('#kind').parentNode.appendChild(el);
   el.addEventListener('click', kladblokKlik);
+  // Tablet op slot of app weg: niet wachten, meteen naar de server.
+  document.addEventListener('visibilitychange', () => { if (document.hidden && kb) kladblokBewaar(true); });
   el.addEventListener('input', (e) => {
     if (!kb) return;
     if (e.target.id === 'bk-tekst') { $('[data-kb="stuur"]').disabled = !e.target.value.trim() || berichtVerstuurt; return; }
@@ -2275,19 +2315,27 @@ function kladblokVenster() {
   });
 }
 
-function kladblokOpen() {
+async function kladblokOpen() {
   const kind = kidVan(s.tabletKid);
-  if (!kind) return;
-  kladblokVenster();
-  kb = { modus: 'schrijf', kid: kind.id, ...kladblokLaad(kind.id), weg: false };
-  $('#kladblok').hidden = false;
-  kladblokTeken(true);
+  if (!kind || kbOpent) return;
+  kbOpent = true;
+  try {
+    const d = await kladblokLaad(kind.id);
+    if (s.tabletKid !== kind.id) return;
+    kladblokVenster();
+    kb = { modus: 'schrijf', kid: kind.id, blaadjes: d.blaadjes, nu: d.nu, weg: false };
+    $('#kladblok').hidden = false;
+    kladblokTeken(true);
+    if (d.vuil) kladblokBewaar(true);
+  } finally {
+    kbOpent = false;
+  }
 }
 
 function kladblokDicht() {
   const el = $('#kladblok');
   if (!el) return;
-  kladblokBewaar();
+  kladblokBewaar(true);
   el.hidden = true;
   el.innerHTML = '';
   kb = null;
