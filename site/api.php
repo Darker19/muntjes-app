@@ -137,6 +137,12 @@ try {
         ts INTEGER NOT NULL,
         gelezen INTEGER NOT NULL DEFAULT 0
     )');
+    // Kladblok van een kind: de blaadjes als JSON, zodat ze niet weg zijn als de tablet-opslag leeg raakt.
+    $db->exec('CREATE TABLE IF NOT EXISTS kladblok (
+        kid TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        ts INTEGER NOT NULL
+    )');
 } catch (Throwable $e) {
     fail('De database werkt niet op deze server. Controleer of PHP de map data/ mag beschrijven en of SQLite aan staat.', 500);
 }
@@ -360,6 +366,12 @@ function pin_in_gebruik(string $pin, int $behalve = 0): bool {
 function berichten_aan(string $kid): bool {
     $s = lees_staat();
     foreach ($s ? json_decode($s['data'], true)['kids'] ?? [] : [] as $k) if (($k['id'] ?? '') === $kid) return !empty($k['berichten']);
+    return false;
+}
+// Staat het kladblok aan voor dit kind?
+function kladblok_aan(string $kid): bool {
+    $s = lees_staat();
+    foreach ($s ? json_decode($s['data'], true)['kids'] ?? [] : [] as $k) if (($k['id'] ?? '') === $kid) return !empty($k['kladblok']);
     return false;
 }
 function lees_staat(): ?array {
@@ -1117,6 +1129,40 @@ switch ($actie) {
         $st = $db->prepare('UPDATE berichten SET gelezen = 1 WHERE kid = ? AND van = ? AND gelezen = 0');
         $st->execute([$kid, $van]);
         if ($st->rowCount()) zet_instelling('berichten_versie', (string)((int)(instelling('berichten_versie') ?? 0) + 1));
+        out(['ok' => true]);
+    }
+
+    // Kladblok: alleen het kind zelf (tablet) leest en schrijft zijn eigen blaadjes.
+    case 'kladblok': {
+        $w = wie();
+        if (!$w) fail('Niet ingelogd.', 401);
+        if ($w['rol'] !== 'kind') fail('Het kladblok is alleen voor de tablet.', 403);
+        if (!kladblok_aan($w['kid'])) fail('Het kladblok staat uit.', 403);
+        $st = $db->prepare('SELECT data, ts FROM kladblok WHERE kid = ?');
+        $st->execute([$w['kid']]);
+        $r = $st->fetch();
+        $d = $r ? json_decode($r['data'], true) : null;
+        out(['blaadjes' => is_array($d['blaadjes'] ?? null) ? $d['blaadjes'] : [], 'nu' => (int)($d['nu'] ?? 0), 'ts' => $r ? (int)$r['ts'] * 1000 : 0]);
+    }
+
+    case 'kladblok_bewaar': {
+        need_post();
+        $w = wie();
+        if (!$w) fail('Niet ingelogd.', 401);
+        if ($w['rol'] !== 'kind') fail('Het kladblok is alleen voor de tablet.', 403);
+        if (!kladblok_aan($w['kid'])) fail('Het kladblok staat uit.', 403);
+        $bl = $in['blaadjes'] ?? null;
+        if (!is_array($bl) || !array_is_list($bl) || count($bl) < 1 || count($bl) > 10) fail('Ongeldig kladblok.');
+        $schoon = [];
+        foreach ($bl as $b) {
+            if (!is_string($b)) fail('Ongeldig kladblok.');
+            $b = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $b) ?? '';
+            if (mb_strlen($b) > 20000) fail('Dat blaadje is te vol. Begin een nieuw blaadje.');
+            $schoon[] = $b;
+        }
+        $nu = max(0, min((int)($in['nu'] ?? 0), count($schoon) - 1));
+        $db->prepare('INSERT INTO kladblok (kid, data, ts) VALUES (?, ?, ?) ON CONFLICT(kid) DO UPDATE SET data = excluded.data, ts = excluded.ts')
+            ->execute([$w['kid'], json_encode(['blaadjes' => $schoon, 'nu' => $nu], JSON_UNESCAPED_UNICODE), time()]);
         out(['ok' => true]);
     }
 
