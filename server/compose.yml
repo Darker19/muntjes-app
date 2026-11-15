@@ -1,6 +1,6 @@
 # Muntjes-app: PHP voor api.php.
 # Bestanden in /srv/web/sites/muntjes (gedeployed vanuit GitHub), database + logins in ./data.
-# De data-map is alleen voor PHP zichtbaar. De startpincode staat in .env (START_PIN).
+# De data-map is alleen voor PHP zichtbaar. .env is leeg (START_PIN alleen bij een nieuwe installatie).
 # firebase.json = geheime sleutel om pushberichten naar de widget te sturen (niet in GitHub).
 # timers = apart proces voor de meldingen "Tijd is om" (Web Push); de VAPID-sleutel staat in de database.
 services:
