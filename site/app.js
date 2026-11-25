@@ -2509,13 +2509,21 @@ function schermBerichten() {
 }
 
 // Na het tekenen: naar het nieuwste berichtje scrollen en wat je ziet als gelezen markeren.
-let boAantal = -1;
+// De lijst wordt bij elke render opnieuw gemaakt; zonder dit sprong hij steeds terug naar boven.
+let boAantal = -1, boTop = 0, boOnder = true;
+function berichtenVoorRender() {
+  const l = $('#bo-lijst');
+  if (!l) { boOnder = true; return; }
+  boTop = l.scrollTop;
+  boOnder = l.scrollHeight - l.scrollTop - l.clientHeight < 40;
+}
 function berichtenNaRender() {
   const l = $('#bo-lijst');
   if (l && weergave !== 'kind' && s.scherm === 'berichten') {
     const kid = berichtKidNu();
     const n = berichten.filter((b) => b.kid === kid).length + ':' + kid;
-    if (n !== boAantal) { boAantal = n; l.scrollTop = l.scrollHeight; }
+    // Nieuw berichtje, ander kind, net geopend of je stond al onderaan: naar het nieuwste. Anders blijven waar je was.
+    if (n !== boAantal || boOnder) { boAantal = n; l.scrollTop = l.scrollHeight; } else l.scrollTop = boTop;
     if (document.visibilityState === 'visible') berichtGelezen(kid, 'kind');
   } else boAantal = -1;
   if (kb && kb.modus === 'bericht') berichtjesLijst();
@@ -2858,6 +2866,7 @@ function focusSleutel() {
 function render() {
   const focus = focusSleutel();
   const scrolls = [...document.querySelectorAll('[data-scroll]')].map((el) => [el.dataset.scroll, el.scrollTop]);
+  berichtenVoorRender();
 
   if (!DEMO) weergave = rol === 'kind' ? 'kind' : 'ouder';
   document.body.classList.toggle('bare', weergave !== 'beide');
@@ -2934,6 +2943,11 @@ window.addEventListener('storage', (e) => {
 });
 window.addEventListener('resize', () => {
   document.documentElement.style.setProperty('--barh', $('#bar').offsetHeight + 'px');
+});
+// Toetsenbord van de telefoon komt omhoog bij het terugschrijven: het nieuwste berichtje in beeld houden.
+document.addEventListener('focusin', (e) => {
+  if (e.target.id !== 'bo-tekst') return;
+  setTimeout(() => { const l = $('#bo-lijst'); if (l) l.scrollTop = l.scrollHeight; }, 350);
 });
 
 // Elke seconde: lopende timers bijwerken en piepen (alleen bij de ouder) als de tijd om is.
