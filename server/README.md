@@ -10,12 +10,12 @@ Wat er op de server staat voor muntjes.darkesttimes.nl. Deze bestanden gaan **ni
 - Container `muntjes-timers-1` (service `timers`): draait elke 15 seconden `timers.php` en stuurt Web Push "Tijd is om" naar telefoons die meldingen aan hebben. De VAPID-sleutel wordt de eerste keer zelf gemaakt en staat in de database (tabel `instellingen`, sleutel `vapid`). Na het toevoegen: `cd /srv/muntjes && sudo docker compose up -d`.
 - `Caddyfile-blok.txt` → toegevoegd aan `/srv/web/Caddyfile`
 - De site zelf (`site/`) wordt bij een push naar `main` door GitHub Actions naar `/srv/web/sites/muntjes` gekopieerd (gebruiker `deploy`, alleen die map via rrsync).
-- Widget-app (`android/`): GitHub Actions bouwt bij een push naar `main` de APK en publiceert die als release (`muntjes-widget.apk`). Geheimen in GitHub: `GOOGLE_SERVICES_JSON`, `KEYSTORE_B64`, `KEYSTORE_PASSWORD`. Kopie van de ondertekensleutel: NAS `homes/Ricardo/SleutPincode vergeten? Een nieuwe `START_PIN` helpt niet meer zodra er gebruikers zijn. Zet de pincode rechtstreeks in de database (4 tot 8 cijfers, mag niet al bij iemand anders horen):
+- Widget-app (`android/`): GitHub Actions bouwt bij een push naar `main` de APK en publiceert die als release (`muntjes-widget.apk`). Geheimen in GitHub: `GOOGLE_SERVICES_JSON`, `KEYSTORE_B64`, `KEYSTORE_PASSWORD`. Kopie van de ondertekensleutel: NAS `homes/Ricardo/Sleutels/muntjes-widget/`.
+- Back-up: `/srv/muntjes` staat in `/usr/local/sbin/nas-backup-export` (nachtelijk naar de NAS).
+
+Pincode vergeten? Een nieuwe `START_PIN` helpt niet meer zodra er gebruikers zijn. Een andere ouder kan in de app de pincode resetten (Beheer › Gebruikers). Anders zet je de pincode rechtstreeks in de database (4 tot 8 cijfers, mag niet al bij iemand anders horen; `NIEUWE_PIN` en `Papa` vervangen):
 
 ```sh
 cd /srv/muntjes
 sudo docker compose exec -u 82 php php -r '$d = new PDO("sqlite:/srv/sites/muntjes/data/muntjes.sqlite"); $d->prepare("UPDATE gebruikers SET pin_hash = ? WHERE naam = ?")->execute([password_hash("NIEUWE_PIN", PASSWORD_DEFAULT), "Papa"]);'
-```TE FROM instellingen WHERE sleutel = \"pin_hash\"");'
 ```
-
-Bij het volgende verzoek wordt `START_PIN` de nieuwe pincode.
