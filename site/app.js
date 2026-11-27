@@ -2631,7 +2631,8 @@ function volgendFeest() {
   const act = taak || isSter ? taakVan(t.ref, kind.id) || taakVan(t.ref) : klusVan(t.ref);
   const n = isSter && act ? Math.min(act.doel, sterTx(kind.id, act.id, 'goed').length) : 0;
   const beloond = isSter && act
-    ? `<span class="sterrij">${Array.from({ length: act.doel }, (_, i) => ster(40, i < n)).join('')}</span><b class="feest-ster">${n}/${act.doel}</b>`
+    // Meer dan 7 sterren: twee even lange rijen, anders lopen ze uit de kaart.
+    ? `<span class="sterrij"${act.doel > 7 ? ` style="max-width:${Math.ceil(act.doel / 2) * 38}px"` : ''}>${Array.from({ length: act.doel }, (_, i) => ster(act.doel > 7 ? 34 : 40, i < n)).join('')}</span><b class="feest-ster">${n}/${act.doel}</b>`
     : `${v.icoon(52).repeat(Math.min(5, Math.max(1, t.amount)))}<b>+${t.amount} ${v.woord(t.amount)}</b>`;
   const thema = MASCOTTE[kind.thema] ? kind.thema : 'geen';
   el.innerHTML = `<canvas class="confetti" aria-hidden="true"></canvas>
